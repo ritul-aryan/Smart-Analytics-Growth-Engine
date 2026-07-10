@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SAGE — Multi-Agent EDA Engine</title>
+
+    <!--
+      Anti-flicker theme script.
+      Runs synchronously before the page paints so the correct theme class
+      is already on <html> when CSS is evaluated.  Zustand persists the
+      uiStore under "mae-ui-preferences" with shape { state: { theme } }.
+      Dark is the :root default in index.css; we only need to add "light".
+    -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("mae-ui-preferences");
+          if (raw) {
+            var data = JSON.parse(raw);
+            if (data && data.state && data.state.theme === "light") {
+              document.documentElement.classList.add("light");
+            }
+          }
+        } catch (e) {
+          // localStorage unavailable (private browsing) -- fall back to dark
+        }
+      })();
+    </script>
+
+    <!-- Plotly loaded via CDN to avoid Vite/CJS bundling issues with plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" charset="utf-8"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

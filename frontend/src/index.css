@@ -1,0 +1,125 @@
+/**
+ * frontend/src/index.css
+ *
+ * Global styles for SAGE.
+ *
+ * Design tokens (values sourced from the SAGE.html UI prototype):
+ *   --sage-bg-base        Page / sidebar / topbar / tabbar background
+ *   --sage-bg-elevated    Card / panel surface           (prototype: --card)
+ *   --sage-bg-overlay     Table rows, hover tints        (prototype: --card2)
+ *   --sage-border         Hairline dividers              (prototype: --border)
+ *   --sage-border-strong  Input borders, dashed outlines (prototype: --border2)
+ *   --sage-text-primary   Headings and body copy         (prototype: --text)
+ *   --sage-text-muted     Labels and secondary copy      (prototype: --text2)
+ *   --sage-text-dim       Tertiary / disabled copy       (prototype: --text3)
+ *   --sage-accent         Violet brand colour (identical in both themes)
+ *   --sage-accent-soft    Accent-tinted fills (drag-over, selection)
+ *   --sage-accent-border  Accent-tinted borders (selected cards)
+ *   --sage-crit           Critical severity / danger banners
+ *   --sage-high           High severity / warnings
+ *   --sage-med            Medium severity
+ *   --sage-low            Low severity / info
+ *   --sage-good           Success / healthy states
+ *   --sage-*-soft         Soft tinted fills for the severity colours above
+ *                         (prototype SEV pattern, e.g. rgba(244,63,94,.14))
+ *
+ * Theme strategy (single class owner):
+ *   Dark is the default (:root); html.light switches the palette.
+ *   html.dark is set alongside for Tailwind darkMode: "class" variants.
+ *   uiStore.theme is the source of truth; App.tsx applies both classes
+ *   (main.tsx pre-paints them once before React mounts to avoid FOUC).
+ *   No other module may touch the theme classes.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+ * Design tokens -- dark (default)
+ * -------------------------------------------------------------------------- */
+
+:root {
+  --sage-bg-base:       #0F1117;
+  --sage-bg-elevated:   #161A23;
+  --sage-bg-overlay:    #1C212C;
+  --sage-border:        rgba(255, 255, 255, 0.07);
+  --sage-border-strong: rgba(255, 255, 255, 0.12);
+  --sage-text-primary:  #ECEEF2;
+  --sage-text-muted:    #9097A3;
+  --sage-text-dim:      #5B616E;
+  --sage-accent:        #7C3AED;
+  --sage-accent-soft:   rgba(124, 58, 237, 0.16);
+  --sage-accent-border: rgba(124, 58, 237, 0.4);
+  --sage-crit:          #F43F5E;
+  --sage-crit-soft:     rgba(244, 63, 94, 0.14);
+  --sage-high:          #FB923C;
+  --sage-high-soft:     rgba(251, 146, 60, 0.14);
+  --sage-med:           #FACC15;
+  --sage-med-soft:      rgba(250, 204, 21, 0.14);
+  --sage-low:           #38BDF8;
+  --sage-low-soft:      rgba(56, 189, 248, 0.14);
+  --sage-good:          #34D399;
+  --sage-good-soft:     rgba(52, 211, 153, 0.14);
+}
+
+/* ---------------------------------------------------------------------------
+ * Design tokens -- light override
+ * Applied when <html class="light"> (toggled via uiStore + App.tsx)
+ * Chart panels intentionally keep their dark surfaces -- analytics tools
+ * commonly pair a light chrome with dark data visualisation canvases.
+ * -------------------------------------------------------------------------- */
+
+html.light {
+  --sage-bg-base:       #FAFAFB;
+  --sage-bg-elevated:   #FFFFFF;
+  --sage-bg-overlay:    #F4F5F7;
+  --sage-border:        rgba(15, 17, 23, 0.09);
+  --sage-border-strong: rgba(15, 17, 23, 0.14);
+  --sage-text-primary:  #0F1117;
+  --sage-text-muted:    #5B616E;
+  --sage-text-dim:      #9097A3;
+  --sage-accent:        #7C3AED;
+  --sage-accent-soft:   rgba(124, 58, 237, 0.10);
+  --sage-accent-border: rgba(124, 58, 237, 0.35);
+  --sage-crit:          #E11D48;
+  --sage-crit-soft:     rgba(225, 29, 72, 0.10);
+  --sage-high:          #EA580C;
+  --sage-high-soft:     rgba(234, 88, 12, 0.10);
+  --sage-med:           #CA8A04;
+  --sage-med-soft:      rgba(202, 138, 4, 0.10);
+  --sage-low:           #0284C7;
+  --sage-low-soft:      rgba(2, 132, 199, 0.10);
+  --sage-good:          #059669;
+  --sage-good-soft:     rgba(5, 150, 105, 0.10);
+}
+
+/* ---------------------------------------------------------------------------
+ * Base layer
+ * -------------------------------------------------------------------------- */
+
+body {
+  background-color: var(--sage-bg-base);
+  color: var(--sage-text-primary);
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* ---------------------------------------------------------------------------
+ * Tab panel entrance animation
+ * Applied to the active tab panel in DashboardPage.
+ * -------------------------------------------------------------------------- */
+
+@keyframes tab-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tab-panel-enter {
+  animation: tab-enter 0.2s ease-out forwards;
+}

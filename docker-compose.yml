@@ -1,0 +1,70 @@
+# =============================================================================
+# docker-compose.yml — MAE pre-deploy infrastructure
+#
+# Spins up PostgreSQL and Redis for the cloud/production stack.
+# The MAE application itself is NOT containerised here — it runs on the
+# host (or a separate app server) and connects to these services.
+#
+# Usage:
+#   docker compose up -d          # start services in background
+#   docker compose down           # stop and remove containers
+#   docker compose down -v        # also delete volumes (wipes data)
+#
+# After starting, update .env:
+#   DB_BACKEND=postgres
+#   DATABASE_URL=postgresql+asyncpg://mae:mae_secret@localhost:5432/mae
+#   TASK_BACKEND=arq
+#   REDIS_URL=redis://localhost:6379
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: mae_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mae
+      POSTGRES_PASSWORD: mae_secret
+      POSTGRES_DB: mae
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mae -d mae"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 (used by ARQ task queue)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: mae_redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+# =============================================================================
+# Named volumes (data persists across container restarts)
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
