@@ -169,6 +169,20 @@ def _apply_decision(
             df[col] = pd.to_numeric(df[col], errors="coerce").clip(lower=lo, upper=hi)
             return df, f"Clamped '{col}' to [{lo}, {hi}]"
 
+    if action == "treat_as_missing" and col and col in df.columns:
+        num = pd.to_numeric(df[col], errors="coerce")
+        if atype == "LOGICAL_VIOLATION":
+            lo, hi = details.get("min_bound"), details.get("max_bound")
+        else:  # STATISTICAL_OUTLIER
+            lo, hi = details.get("lower_fence"), details.get("upper_fence")
+        if lo is not None and hi is not None:
+            mask = (num < lo) | (num > hi)
+            df[col] = num.where(~mask, other=pd.NA)
+            return df, (
+                f"Set {int(mask.sum())} out-of-bounds value(s) in '{col}' "
+                f"to missing (NaN) instead of clamping"
+            )
+
     if action == "redact" and col and col in df.columns:
         df[col] = "[REDACTED]"
         return df, f"Redacted column '{col}'"
