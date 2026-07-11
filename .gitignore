@@ -12,3 +12,6 @@ data/uploads/*
 !data/uploads/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+SAGE_Architecture.docx
+SAGE_Features.docx
+SAGE_File_Reference.docx
