@@ -94,6 +94,14 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(sessions_router)
 
+    @app.get("/", include_in_schema=False)
+    async def root() -> dict[str, str]:
+        return {
+            "service": "SAGE — Multi-Agent EDA Engine",
+            "status": "running",
+            "docs": "/api/docs",
+        }
+
     return app
 
 
