@@ -101,6 +101,12 @@ export default function AnomalyCard({
   const actions = ACTIONS[anomaly.anomaly_type] ?? [];
   const selectedAction = decision?.action ?? "";
 
+  // Prefer the true per-column count (details.total_flagged) so the number shown
+  // matches what the janitor will actually change. Fall back to affected_rows for
+  // older sessions whose anomaly records predate this field.
+  const trueCount =
+    (anomaly.details?.total_flagged as number | undefined) ?? anomaly.affected_rows;
+
   const handleActionChange = useCallback(
     (action: string) => {
       // Auto-populate params for clamp_bounds from anomaly details
@@ -153,7 +159,7 @@ export default function AnomalyCard({
     selectedAction === "drop_rows" &&
     (anomaly.null_rate ?? 0) > DANGER_NULL_RATE;
 
-  const rowsAtRisk = anomaly.affected_rows;
+  const rowsAtRisk = trueCount;
   const pct = totalRows ? ((rowsAtRisk / totalRows) * 100).toFixed(1) : null;
 
   const cardBorder = SEVERITY_BORDER[anomaly.severity] ?? SEVERITY_BORDER["low"];
@@ -180,7 +186,7 @@ export default function AnomalyCard({
 
       {/* Stats row */}
       <div className="mt-2 flex flex-wrap gap-4 text-sm text-[var(--sage-text-muted)]">
-        <span>{anomaly.affected_rows.toLocaleString()} rows affected</span>
+        <span>{trueCount.toLocaleString()} rows affected</span>
         {anomaly.null_rate !== null && (
           <span>Null rate: {(anomaly.null_rate * 100).toFixed(1)}%</span>
         )}
