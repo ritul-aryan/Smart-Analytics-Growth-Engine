@@ -66,6 +66,8 @@ export interface Session {
 export interface AnomalyDetails {
   // DUPLICATE_ROWS
   sample_indices?: number[];
+  // All anomaly types (true per-column count, before priority-chain de-duplication)
+  total_flagged?: number;
   // MISSING_DATA
   null_rate?: number;
   // ZERO_AS_MISSING
