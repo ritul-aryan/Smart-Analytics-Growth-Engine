@@ -190,11 +190,21 @@ def _contextual_zero_engine(df: pd.DataFrame, domain_profile: dict[str, Any]) ->
     return result
 
 
-def _rec(atype: str, n: int, total: int, col: str | None, null_rate: float | None, details: dict[str, Any]) -> dict[str, Any]:
-    """Construct a standard anomaly record dict."""
+def _rec(atype: str, n: int, total: int, col: str | None, null_rate: float | None,
+         details: dict[str, Any], total_flagged: int | None = None) -> dict[str, Any]:
+    """Construct a standard anomaly record dict.
+
+    n             -> affected_rows: priority-chain attribution count (rows uniquely
+                     attributed to THIS anomaly; drives quality score + severity).
+    total_flagged -> true per-column count of matching values before priority-chain
+                     de-duplication; shown on the review card so the number matches
+                     what will actually change. Defaults to n when not supplied.
+    """
+    d = dict(details)
+    d["total_flagged"] = n if total_flagged is None else total_flagged
     return {"anomaly_id": str(uuid4()), "anomaly_type": atype, "column_name": col,
             "affected_rows": n, "null_rate": null_rate, "severity": _severity(n, total),
-            "details": details, "user_action": None, "action_params": None, "resolved_at": None}
+            "details": d, "user_action": None, "action_params": None, "resolved_at": None}
 
 
 def _run_anomaly_detection(
@@ -233,10 +243,12 @@ def _t2_missing(df: pd.DataFrame, c: pd.Series) -> tuple[list[dict[str, Any]], p
     """Priority 2 — NaN/empty per column. Includes null_rate (Bug 2 fix)."""
     recs, combined = [], _false(df)
     for col in df.columns:
-        m = (df[col].isna() | (df[col].astype(str).str.strip() == "")) & ~c
+        m_all = df[col].isna() | (df[col].astype(str).str.strip() == "")
+        m = m_all & ~c
         if m.any():
             nr = float(df[col].isna().mean())
-            recs.append(_rec("MISSING_DATA", int(m.sum()), len(df), col, nr, {"null_rate": nr}))
+            recs.append(_rec("MISSING_DATA", int(m.sum()), len(df), col, nr,
+                             {"null_rate": nr}, total_flagged=int(m_all.sum())))
             combined = combined | m
     return recs, combined
 
@@ -247,9 +259,11 @@ def _t3_zero_missing(df: pd.DataFrame, zero_analysis: dict[str, str], c: pd.Seri
     for col, ztype in zero_analysis.items():
         if ztype != "MISSING_ZERO" or col not in df.columns:
             continue
-        m = (pd.to_numeric(df[col], errors="coerce") == 0) & ~c
+        num_zero = (pd.to_numeric(df[col], errors="coerce") == 0)
+        m = num_zero & ~c
         if m.any():
-            recs.append(_rec("ZERO_AS_MISSING", int(m.sum()), len(df), col, None, {"zero_count": int(m.sum())}))
+            recs.append(_rec("ZERO_AS_MISSING", int(m.sum()), len(df), col, None,
+                             {"zero_count": int(m.sum())}, total_flagged=int(num_zero.sum())))
             combined = combined | m
     return recs, combined
 
@@ -264,10 +278,12 @@ def _t4_logical(df: pd.DataFrame, domain_profile: dict[str, Any], c: pd.Series) 
         lo, hi = bounds.get("min_bound"), bounds.get("max_bound")
         if lo is None or hi is None:
             continue
-        m = ((num < lo) | (num > hi)) & ~c & num.notna()
+        m_all = ((num < lo) | (num > hi)) & num.notna()
+        m = m_all & ~c
         if m.any():
             recs.append(_rec("LOGICAL_VIOLATION", int(m.sum()), len(df), col, None,
-                             {"min_bound": lo, "max_bound": hi, "description": bounds.get("description", "")}))
+                             {"min_bound": lo, "max_bound": hi, "description": bounds.get("description", "")},
+                             total_flagged=int(m_all.sum())))
             combined = combined | m
     return recs, combined
 
@@ -286,14 +302,15 @@ def _t5_outliers(df: pd.DataFrame, iqr_mult: float, c: pd.Series) -> tuple[list[
             if mad == 0:
                 continue
             fence = iqr_mult * mad * 1.4826
-            m = ((num - med).abs() > fence) & ~c & num.notna()
+            m_all = ((num - med).abs() > fence) & num.notna()
             lo, hi = float(med - fence), float(med + fence)
         else:
             lo, hi = float(q1 - iqr_mult * iqr), float(q3 + iqr_mult * iqr)
-            m = ((num < lo) | (num > hi)) & ~c & num.notna()
+            m_all = ((num < lo) | (num > hi)) & num.notna()
+        m = m_all & ~c
         if m.any():
             recs.append(_rec("STATISTICAL_OUTLIER", int(m.sum()), len(df), col, None,
-                             {"lower_fence": lo, "upper_fence": hi}))
+                             {"lower_fence": lo, "upper_fence": hi}, total_flagged=int(m_all.sum())))
             combined = combined | m
     return recs, combined
 
