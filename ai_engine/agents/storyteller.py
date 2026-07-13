@@ -472,7 +472,30 @@ def _s(
 # ---------------------------------------------------------------------------
 # LLM primary chart
 # ---------------------------------------------------------------------------
-
+def _parse_chart_json(raw_str: str) -> dict[str, Any]:
+    """
+    Parse the LLM's chart-selection response into a dict.
+    llm.complete() returns free text (task="general"), so the model may wrap
+    the JSON in ```json ... ``` fences or add prose. A bare json.loads() on
+    that fails with "Expecting value: line 1 column 1 (char 0)". This strips
+    fences and, as a last resort, extracts the outermost {...} object before
+    parsing. On genuine failure it raises, so the caller's existing except
+    branch falls back to the default (non-LLM) charts unchanged.
+    """
+    text = raw_str.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return json.loads(text[start:end + 1])
+        raise
 async def _llm_primary_chart(
     df: pd.DataFrame, num_cols: list[str], user_intent: str, llm: LLMProvider,
 ) -> ChartSpec | None:
@@ -489,7 +512,7 @@ async def _llm_primary_chart(
         raw_str = await llm.complete(prompt, task="general")
         if not raw_str or not raw_str.strip():
             raise ValueError("LLM returned empty response")
-        raw = json.loads(raw_str)
+        raw = _parse_chart_json(raw_str)
         sel = _PrimaryChartSelection.model_validate(raw)
         all_cols = set(df.columns)
         x = sel.x_column if sel.x_column in all_cols else (num_cols[0] if num_cols else None)
