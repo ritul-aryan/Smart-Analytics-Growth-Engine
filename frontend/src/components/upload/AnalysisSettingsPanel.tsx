@@ -93,7 +93,7 @@ export default function AnalysisSettingsPanel({ disabled }: Props): React.ReactE
         <div className="border-t border-[var(--sage-border)] px-4 py-4 space-y-4">
           <SliderRow
             label="OHE max unique values"
-            hint="Categorical columns with more unique values than this are skipped. Default: 10."
+            hint="Controls which categorical (text) columns get one-hot encoded into 0/1 columns for machine learning. Columns with more unique values than this are skipped instead, since one-hot encoding a column with hundreds of unique values would create hundreds of new columns. Example: a 'city' column with 8 distinct cities gets encoded; a 'patient_id' column with 50,000 unique values gets skipped. Default: 10."
             value={settings.oheMaxUnique}
             min={2} max={50} step={1}
             disabled={disabled}
@@ -101,7 +101,7 @@ export default function AnalysisSettingsPanel({ disabled }: Props): React.ReactE
           />
           <SliderRow
             label="Log transform skew threshold"
-            hint="Log transform fires only when |skewness| exceeds this. Default: 1.5."
+            hint="Skewness measures how lopsided a column's distribution is — 0 means perfectly symmetric, larger values mean a long tail on one side. When a column's skewness (positive or negative) exceeds this threshold, SAGE adds a log-transformed version of it, which often makes lopsided data easier for models to learn from. Example: income data is often heavily right-skewed (skew > 1.5) because most people earn a moderate amount but a few earn very high salaries. Default: 1.5."
             value={settings.logSkewThreshold}
             min={0.5} max={5.0} step={0.1}
             disabled={disabled}
@@ -109,7 +109,7 @@ export default function AnalysisSettingsPanel({ disabled }: Props): React.ReactE
           />
           <SliderRow
             label="Interaction term |r| threshold"
-            hint="Interaction term created only when highest column correlation exceeds this. Default: 0.50."
+            hint="An interaction term is a new column created by multiplying two existing numeric columns together, which can help models capture relationships that neither column shows on its own. SAGE only creates one when the strongest correlation between two columns (as an absolute value, ignoring direction) exceeds this threshold. Example: if 'height' and 'weight' correlate at 0.62, a height×weight interaction column is added. Default: 0.50."
             value={settings.correlationThreshold}
             min={0.1} max={0.99} step={0.01}
             disabled={disabled}
@@ -117,7 +117,7 @@ export default function AnalysisSettingsPanel({ disabled }: Props): React.ReactE
           />
           <SliderRow
             label="Outlier IQR multiplier"
-            hint="Higher values = less sensitive outlier detection. Default: 3.0."
+            hint="Outliers are flagged using the IQR (interquartile range) method: any value farther from the middle 50% of the data than this multiplier times the IQR is flagged as an outlier. A higher multiplier means only more extreme values get flagged; a lower multiplier flags more values, including moderate ones. Example: with the default of 3.0, a value has to be quite far from the typical range to be flagged — raising it to 5.0 would only catch the most extreme cases. Default: 3.0."
             value={settings.outlierIqrMultiplier}
             min={1.5} max={5.0} step={0.1}
             disabled={disabled}
@@ -125,7 +125,7 @@ export default function AnalysisSettingsPanel({ disabled }: Props): React.ReactE
           />
           <SliderRow
             label="Null density row threshold"
-            hint="Rows with a null fraction above this trigger HIGH_NULL_DENSITY_ROWS. Default: 0.50."
+            hint="If a single row is missing more than this fraction of its values, it's flagged as a high-null-density row — often a sign the whole row should be reviewed rather than filled in column by column. Example: with the default of 0.50, a row missing 6 out of 10 fields gets flagged; a row missing only 2 out of 10 does not. Default: 0.50."
             value={settings.nullDensityThreshold}
             min={0.1} max={0.9} step={0.05}
             disabled={disabled}
