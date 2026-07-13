@@ -188,8 +188,18 @@ def _generate_insight(
             q1, med, q3 = float(s.quantile(0.25)), float(s.median()), float(s.quantile(0.75))
             iqr = q3 - q1
             n_out = int(((s < q1 - outlier_iqr_multiplier * iqr) | (s > q3 + outlier_iqr_multiplier * iqr)).sum())
-            out_note = (f"{n_out} outlier(s) flagged — review in the Audit Log." if n_out
-                        else "No outliers; values cluster tightly around the median.")
+            if n_out:
+                out_note = f"{n_out} outlier(s) flagged — review in the Audit Log."
+            else:
+                # Describe spread honestly instead of assuming a tight cluster:
+                # compare the middle-50% span (IQR) to the full range. A wide
+                # IQR relative to range means values are spread out (e.g. a
+                # uniform distribution), NOT clustered around the median.
+                full_range = float(s.max() - s.min())
+                if full_range > 0 and iqr / full_range > 0.4:
+                    out_note = "No outliers; values are spread fairly evenly across the range."
+                else:
+                    out_note = "No outliers; most values sit close to the median."
             return f"Median={med:.3g}, IQR={iqr:.3g}. {out_note}"
 
         if chart_type == "heatmap" and heatmap_cols and len(heatmap_cols) >= 2:
@@ -203,9 +213,15 @@ def _generate_insight(
             top_pair = abs_flat.idxmax()
             top_r = float(flat.loc[top_pair])
             direction = "positive" if top_r > 0 else "negative"
-            impl = ("High collinearity — consider dropping one feature for linear models."
-                    if abs(top_r) > STORYTELLER_COLLINEARITY_THRESHOLD else
-                    "Moderate association — potential candidate for an interaction feature.")
+            abs_r = abs(top_r)
+            if abs_r > STORYTELLER_COLLINEARITY_THRESHOLD:
+                impl = "High collinearity — consider dropping one feature for linear models."
+            elif abs_r >= 0.3:
+                impl = "Moderate association — potential candidate for an interaction feature."
+            elif abs_r >= 0.1:
+                impl = "Weak association."
+            else:
+                impl = "No meaningful linear association between the numeric features."
             return (f"Strongest pair: '{top_pair[0]}' & '{top_pair[1]}' "
                     f"({direction}, r={top_r:.2f}). {impl}")
 
