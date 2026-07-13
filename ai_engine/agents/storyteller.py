@@ -295,26 +295,53 @@ async def run_storyteller(
     # is otherwise computed from df.isnull() AFTER cleaning, so a column that
     # was fully imputed or dropped for missing data looks indistinguishable
     # from a column that was never dirty in the first place.
+    #
+    # Count precedence: the janitor's actual "rows_changed" (what really changed
+    # on the working frame) > the anomaly's true detection count (total_flagged)
+    # > affected_rows (attribution). Wording reflects the real anomaly type and
+    # action so zeros are not mislabelled as missing values.
+    def _summary_count(ch: dict[str, Any], anom: dict[str, Any] | None) -> Any:
+        if ch.get("rows_changed") is not None:
+            return ch["rows_changed"]
+        if anom:
+            details = anom.get("details") or {}
+            if details.get("total_flagged") is not None:
+                return details["total_flagged"]
+            return anom.get("affected_rows")
+        return None
+
     cleaning_actions: list[str] = []
     for ch in (state.get("changes_applied") or []):  # type: ignore[union-attr]
         act = ch.get("action")
         anom = _anomaly_by_id.get(str(ch.get("anomaly_id", "")))
         col = anom.get("column_name") if anom else None
-        rows = anom.get("affected_rows") if anom else None
-        if act in ("fill_mean", "fill_median", "fill_mode") and col:
-            cleaning_actions.append(
-                f"'{col}': {rows} missing value(s) imputed via {act.replace('fill_', '')}."
-            )
-        elif act == "drop_column" and col:
-            cleaning_actions.append(
-                f"'{col}': column dropped ({rows} missing value(s))."
-            )
-        elif act == "drop_rows" and col:
-            cleaning_actions.append(
-                f"'{col}': {rows} row(s) dropped for missing/invalid data."
-            )
-        elif act == "remove_duplicates":
+        atype = anom.get("anomaly_type") if anom else None
+        rows = _summary_count(ch, anom)
+        if act == "remove_duplicates":
             cleaning_actions.append(f"{rows} duplicate row(s) removed.")
+        elif act == "drop_column" and col:
+            cleaning_actions.append(f"'{col}': column dropped.")
+        elif act == "drop_rows" and col:
+            cleaning_actions.append(f"'{col}': {rows} row(s) dropped.")
+        elif act == "treat_as_missing" and col:
+            cleaning_actions.append(
+                f"'{col}': {rows} out-of-range value(s) set to missing (NaN)."
+            )
+        elif act in ("clamp_bounds", "cap_iqr") and col:
+            cleaning_actions.append(f"'{col}': {rows} out-of-range value(s) capped to bounds.")
+        elif act in ("fill_mean", "fill_median", "fill_mode") and col:
+            method = act.replace("fill_", "")
+            if atype == "ZERO_AS_MISSING":
+                cleaning_actions.append(
+                    f"'{col}': {rows} zero(s) treated as missing and imputed via {method}."
+                )
+            else:
+                cleaning_actions.append(
+                    f"'{col}': {rows} missing value(s) imputed via {method}."
+                )
+        elif act in ("redact", "hash_sha256") and col:
+            verb = "redacted" if act == "redact" else "hashed"
+            cleaning_actions.append(f"'{col}': column {verb}.")
 
     specs: list[ChartSpec] = []
     primary = await _llm_primary_chart(df, num_cols, user_intent, llm)
