@@ -583,6 +583,17 @@ def _build_narrative(
         has_data = is_numeric and num_series.notna().any()
         null_count = int(series.isna().sum())
 
+        # Skew/kurtosis are meaningless on binary/indicator (0/1) columns such
+        # as one-hot-encoded dummies -- a two-value column has no meaningful
+        # shape. Detect that case (all non-null values are 0 or 1, at most two
+        # distinct values) and suppress ONLY skew/kurt for it. Genuine numeric
+        # columns (many distinct values) are unaffected.
+        is_binary_indicator = False
+        if has_data:
+            nn = num_series.dropna()
+            if nn.nunique() <= 2 and nn.isin((0, 1)).all():
+                is_binary_indicator = True
+
         def _s_float(v: Any) -> float | None:
             try:
                 f = float(v)
@@ -600,8 +611,8 @@ def _build_narrative(
             "std":          _s_float(num_series.std())      if has_data else None,
             "min":          _s_float(num_series.min())      if has_data else None,
             "max":          _s_float(num_series.max())      if has_data else None,
-            "skewness":     _s_float(num_series.skew())     if has_data else None,
-            "kurtosis":     _s_float(num_series.kurtosis()) if has_data else None,
+            "skewness":     None if is_binary_indicator else (_s_float(num_series.skew())     if has_data else None),
+            "kurtosis":     None if is_binary_indicator else (_s_float(num_series.kurtosis()) if has_data else None),
         })
 
     return {
