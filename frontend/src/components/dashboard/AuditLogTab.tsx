@@ -35,8 +35,8 @@ export default function AuditLogTab({ logs }: Props): React.ReactElement {
               <tr key={log.id} className={["border-b border-[var(--sage-border)]", i % 2 !== 0 ? "bg-[var(--sage-bg-overlay)]" : ""].join(" ")}>
                 <td className="px-4 py-2.5 font-mono text-[var(--sage-accent)]">{log.agent_name}</td>
                 <td className="px-4 py-2.5 text-[var(--sage-text-primary)]">{log.phase}</td>
-                <td className="max-w-[200px] truncate px-4 py-2.5 text-[var(--sage-text-primary)]">{log.action}</td>
-                <td className="max-w-[200px] truncate px-4 py-2.5 text-[var(--sage-text-muted)]">{log.reason}</td>
+                <td className="max-w-[200px] truncate px-4 py-2.5 text-[var(--sage-text-primary)]" title={log.action}>{log.action}</td>
+                <td className="max-w-[200px] truncate px-4 py-2.5 text-[var(--sage-text-muted)]" title={log.reason}>{log.reason}</td>
                 <td className="px-4 py-2.5 font-mono text-[var(--sage-text-muted)]">{log.column_affected ?? "—"}</td>
                 <td className="px-4 py-2.5 tabular-nums text-[var(--sage-text-primary)]">{log.rows_affected.toLocaleString()}</td>
                 <td className="px-4 py-2.5 tabular-nums text-[var(--sage-text-muted)]">{new Date(log.timestamp).toLocaleTimeString()}</td>
