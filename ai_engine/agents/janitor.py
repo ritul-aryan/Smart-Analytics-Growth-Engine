@@ -4,6 +4,13 @@ ai_engine/agents/janitor.py — Phase 2 agent.
 Reads user HITL decisions from GraphState, applies each transformation to
 df_working in sequence, recalculates quality_score_after, saves clean CSV.
 LLMs are NOT used here — all transformations are deterministic Pandas ops.
+
+Audit honesty: each decision returns the count of rows/values it ACTUALLY
+changed on the working frame at the moment it ran (post prior decisions,
+post dedup). That real count is what gets logged to the audit trail and
+stored in changes_applied — NOT the profiler's pre-cleaning attribution
+count. The two legitimately differ (e.g. treat_as_missing may touch 350,
+not the 351 flagged, if one flagged row was a duplicate removed earlier).
 """
 
 from __future__ import annotations
@@ -69,18 +76,26 @@ async def run_janitor(
             logger.warning("Decision references unknown anomaly_id %s — skipping", aid)
             continue
 
-        df, description = _apply_decision(df, anomaly, action, params)
-        changes.append({"anomaly_id": aid, "action": action, "description": description})
+        df, description, rows_changed = _apply_decision(df, anomaly, action, params)
+        changes.append({
+            "anomaly_id": aid,
+            "action": action,
+            "description": description,
+            "rows_changed": rows_changed,
+        })
 
         if action not in ("keep_as_is", "keep_all"):
             resolved_ids.add(aid)
 
+        # Log the count this action ACTUALLY changed, not the profiler's
+        # attribution count. This keeps the audit row's number consistent
+        # with its description text.
         await auditor.log(
             agent_name="janitor", phase="phase2",
             action=description[:255],
             reason=f"User selected '{action}' for {anomaly['anomaly_type']}",  # type: ignore[literal-required]
             column_affected=anomaly.get("column_name"),  # type: ignore[arg-type]
-            rows_affected=anomaly["affected_rows"],  # type: ignore[literal-required]
+            rows_affected=rows_changed,
         )
 
     # Recalculate quality score on unresolved anomalies
@@ -128,46 +143,54 @@ def _apply_decision(
     anomaly: AnomalyRecord,
     action: str,
     params: dict[str, Any],
-) -> tuple[pd.DataFrame, str]:
-    """Apply one user decision; return (modified df, description string)."""
+) -> tuple[pd.DataFrame, str, int]:
+    """Apply one user decision; return (modified df, description, rows_changed).
+
+    rows_changed is the count of rows/values this action actually altered on
+    the working frame as it exists now.
+    """
     df = df.copy()
     col: str | None = anomaly.get("column_name")  # type: ignore[assignment]
     atype: str = anomaly["anomaly_type"]  # type: ignore[literal-required]
     details: dict[str, Any] = anomaly.get("details") or {}  # type: ignore[assignment]
 
     if action in ("keep_as_is", "keep_all"):
-        return df, f"Kept {atype} as-is (no change)"
+        return df, f"Kept {atype} as-is (no change)", 0
 
     if action == "remove_duplicates":
         n = len(df)
         df = df.drop_duplicates(keep="first").reset_index(drop=True)
-        return df, f"Removed {n - len(df)} duplicate rows"
+        removed = n - len(df)
+        return df, f"Removed {removed} duplicate rows", removed
 
     if action == "drop_column" and col and col in df.columns:
+        n = len(df)
         df = df.drop(columns=[col])
-        return df, f"Dropped column '{col}'"
+        return df, f"Dropped column '{col}'", n
 
     if action == "drop_rows":
-        df, desc = _drop_rows(df, col, atype, details, params)
-        return df, desc
+        return _drop_rows(df, col, atype, details, params)
 
     if action in ("fill_mean", "fill_median", "fill_mode") and col and col in df.columns:
-        df, desc = _fill_missing(df, col, action, atype, details)
-        return df, desc
+        return _fill_missing(df, col, action, atype, details)
 
     if action == "cap_iqr" and col and col in df.columns:
         lo, hi = details.get("lower_fence"), details.get("upper_fence")
         if lo is not None and hi is not None:
             lo = max(float(lo), _get_domain_floor(col))  # enforce physical minimum
-            df[col] = pd.to_numeric(df[col], errors="coerce").clip(lower=lo, upper=hi)
-            return df, f"Capped '{col}' to IQR fences [{lo:.4g}, {hi:.4g}]"
+            num = pd.to_numeric(df[col], errors="coerce")
+            changed = int((((num < lo) | (num > hi)) & num.notna()).sum())
+            df[col] = num.clip(lower=lo, upper=hi)
+            return df, f"Capped '{col}' to IQR fences [{lo:.4g}, {hi:.4g}]", changed
 
     if action == "clamp_bounds" and col and col in df.columns:
         lo = params.get("min_bound") or details.get("min_bound")
         hi = params.get("max_bound") or details.get("max_bound")
         if lo is not None and hi is not None:
-            df[col] = pd.to_numeric(df[col], errors="coerce").clip(lower=lo, upper=hi)
-            return df, f"Clamped '{col}' to [{lo}, {hi}]"
+            num = pd.to_numeric(df[col], errors="coerce")
+            changed = int((((num < lo) | (num > hi)) & num.notna()).sum())
+            df[col] = num.clip(lower=lo, upper=hi)
+            return df, f"Clamped '{col}' to [{lo}, {hi}]", changed
 
     if action == "treat_as_missing" and col and col in df.columns:
         num = pd.to_numeric(df[col], errors="coerce")
@@ -177,24 +200,27 @@ def _apply_decision(
             lo, hi = details.get("lower_fence"), details.get("upper_fence")
         if lo is not None and hi is not None:
             mask = (num < lo) | (num > hi)
+            changed = int(mask.sum())
             df[col] = num.where(~mask, other=pd.NA)
             return df, (
-                f"Set {int(mask.sum())} out-of-bounds value(s) in '{col}' "
+                f"Set {changed} out-of-bounds value(s) in '{col}' "
                 f"to missing (NaN) instead of clamping"
-            )
+            ), changed
 
     if action == "redact" and col and col in df.columns:
+        n = len(df)
         df[col] = "[REDACTED]"
-        return df, f"Redacted column '{col}'"
+        return df, f"Redacted column '{col}'", n
 
     if action == "hash_sha256" and col and col in df.columns:
+        n = len(df)
         df[col] = df[col].astype(str).apply(
             lambda x: hashlib.sha256(x.encode()).hexdigest()
         )
-        return df, f"SHA-256 hashed column '{col}'"
+        return df, f"SHA-256 hashed column '{col}'", n
 
     logger.warning("Unhandled action '%s' for %s col=%s — skipping", action, atype, col)
-    return df, f"Skipped unrecognised action '{action}'"
+    return df, f"Skipped unrecognised action '{action}'", 0
 
 
 def _drop_rows(
@@ -203,40 +229,45 @@ def _drop_rows(
     atype: str,
     details: dict[str, Any],
     params: dict[str, Any],
-) -> tuple[pd.DataFrame, str]:
-    """Dispatch row-drop logic by anomaly type."""
+) -> tuple[pd.DataFrame, str, int]:
+    """Dispatch row-drop logic by anomaly type; return (df, description, removed)."""
     n = len(df)
     if atype == "MISSING_DATA" and col and col in df.columns:
         mask = df[col].isna() | (df[col].astype(str).str.strip() == "")
         df = df[~mask].reset_index(drop=True)
-        return df, f"Dropped {n - len(df)} rows with missing '{col}'"
+        removed = n - len(df)
+        return df, f"Dropped {removed} rows with missing '{col}'", removed
 
     if atype == "STATISTICAL_OUTLIER" and col and col in df.columns:
         lo, hi = details.get("lower_fence"), details.get("upper_fence")
         num = pd.to_numeric(df[col], errors="coerce")
         mask = (num < lo) | (num > hi)
         df = df[~mask].reset_index(drop=True)
-        return df, f"Dropped {n - len(df)} outlier rows in '{col}'"
+        removed = n - len(df)
+        return df, f"Dropped {removed} outlier rows in '{col}'", removed
 
     if atype == "LOGICAL_VIOLATION" and col and col in df.columns:
         lo, hi = details.get("min_bound"), details.get("max_bound")
         num = pd.to_numeric(df[col], errors="coerce")
         mask = (num < lo) | (num > hi)
         df = df[~mask].reset_index(drop=True)
-        return df, f"Dropped {n - len(df)} logically invalid rows in '{col}'"
+        removed = n - len(df)
+        return df, f"Dropped {removed} logically invalid rows in '{col}'", removed
 
     if atype == "ZERO_AS_MISSING" and col and col in df.columns:
         mask = pd.to_numeric(df[col], errors="coerce") == 0
         df = df[~mask].reset_index(drop=True)
-        return df, f"Dropped {n - len(df)} zero-as-missing rows in '{col}'"
+        removed = n - len(df)
+        return df, f"Dropped {removed} zero-as-missing rows in '{col}'", removed
 
     if atype == "HIGH_NULL_DENSITY_ROWS":
         threshold = float(params.get("threshold", DEFAULT_NULL_DENSITY_ROW_THRESHOLD))
         mask = df.isnull().mean(axis=1) > threshold
         df = df[~mask].reset_index(drop=True)
-        return df, f"Dropped {n - len(df)} high-null-density rows"
+        removed = n - len(df)
+        return df, f"Dropped {removed} high-null-density rows", removed
 
-    return df, "drop_rows: no matching rule found — no change"
+    return df, "drop_rows: no matching rule found — no change", 0
 
 
 def _fill_missing(
@@ -245,8 +276,8 @@ def _fill_missing(
     action: str,
     atype: str,
     details: dict[str, Any],
-) -> tuple[pd.DataFrame, str]:
-    """Fill missing or zero values; handles STATISTICAL_OUTLIER inlier mean."""
+) -> tuple[pd.DataFrame, str, int]:
+    """Fill missing or zero values; return (df, description, values_changed)."""
     df = df.copy()
     num = pd.to_numeric(df[col], errors="coerce")
 
@@ -254,23 +285,27 @@ def _fill_missing(
         lo, hi = details.get("lower_fence"), details.get("upper_fence")
         inlier_mean = float(num[(num >= lo) & (num <= hi)].mean())
         mask = (num < lo) | (num > hi)
+        changed = int(mask.sum())
         df[col] = num.where(~mask, inlier_mean)
-        return df, f"Replaced {int(mask.sum())} outliers in '{col}' with inlier mean ({inlier_mean:.4g})"
+        return df, f"Replaced {changed} outliers in '{col}' with inlier mean ({inlier_mean:.4g})", changed
 
     if atype == "ZERO_AS_MISSING" and action == "fill_mean":
         safe_mean = float(num.replace(0, pd.NA).mean())
+        changed = int((num == 0).sum())
         df[col] = num.replace(0, safe_mean)
-        return df, f"Replaced zeros in '{col}' with non-zero mean ({safe_mean:.4g})"
+        return df, f"Replaced {changed} zero(s) in '{col}' with non-zero mean ({safe_mean:.4g})", changed
 
     if action == "fill_mean":
+        changed = int(num.isna().sum())
         val = float(num.mean())
         df[col] = num.fillna(val)
-        return df, f"Filled '{col}' NaNs with mean ({val:.4g})"
+        return df, f"Filled {changed} '{col}' NaN(s) with mean ({val:.4g})", changed
 
     if action == "fill_median":
+        changed = int(num.isna().sum())
         val = float(num.median())
         df[col] = num.fillna(val)
-        return df, f"Filled '{col}' NaNs with median ({val:.4g})"
+        return df, f"Filled {changed} '{col}' NaN(s) with median ({val:.4g})", changed
 
     if action == "fill_mode":
         # Mode imputation is statistically inappropriate for continuous float
@@ -281,15 +316,17 @@ def _fill_missing(
             or df[col].nunique() > JANITOR_CONTINUOUS_CARDINALITY_THRESHOLD
         )
         if is_continuous:
+            changed = int(num.isna().sum())
             val = float(num.median())
             df[col] = num.fillna(val)
             return df, (
-                f"Filled '{col}' NaNs with median ({val:.4g}) "
+                f"Filled {changed} '{col}' NaN(s) with median ({val:.4g}) "
                 f"[mode overridden: continuous column]"
-            )
+            ), changed
+        changed = int(df[col].isna().sum())
         modes = df[col].mode()
         val = modes.iloc[0] if len(modes) > 0 else None
         df[col] = df[col].fillna(val)
-        return df, f"Filled '{col}' NaNs with mode ({val})"
+        return df, f"Filled {changed} '{col}' NaN(s) with mode ({val})", changed
 
-    return df, f"fill action '{action}' unhandled for '{col}'"
+    return df, f"fill action '{action}' unhandled for '{col}'", 0
