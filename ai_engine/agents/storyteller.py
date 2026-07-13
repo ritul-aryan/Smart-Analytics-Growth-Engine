@@ -588,7 +588,11 @@ def _build_narrative(
     if cleaning_actions:
         notes = list(cleaning_actions) + notes
 
-    cat_cols = [c for c in df.columns if str(df[c].dtype) in ("object", "category")]
+    # pandas 3.0 renamed the default string dtype's repr from "object" to
+    # "str" -- without this, string/text columns were never recognised as
+    # categorical, so categorical_cols always came back empty and the
+    # Overview narrative silently omitted the categorical column count.
+    cat_cols = [c for c in df.columns if str(df[c].dtype) in ("object", "category", "str")]
     dt_cols  = [c for c in df.columns if str(df[c].dtype).startswith("datetime")]
 
     column_stats: list[dict[str, Any]] = []
