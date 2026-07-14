@@ -81,7 +81,7 @@ export default function FeReportTab({ feEntries, narrative }: Props): React.Reac
                       {e.reason}
                     </span>
                   </td>
-                  <td className="max-w-[300px] truncate px-4 py-2.5 text-[var(--sage-text-primary)]">{e.action}</td>
+                  <td className="max-w-[300px] truncate px-4 py-2.5 text-[var(--sage-text-primary)]" title={e.action}>{e.action}</td>
                   <td className="px-4 py-2.5 font-mono text-[var(--sage-text-muted)]">{e.column_affected ?? "—"}</td>
                   <td className="px-4 py-2.5 tabular-nums text-[var(--sage-text-primary)]">{e.rows_affected.toLocaleString()}</td>
                   <td className="px-4 py-2.5 tabular-nums text-[var(--sage-text-muted)]">{new Date(e.timestamp).toLocaleTimeString()}</td>
