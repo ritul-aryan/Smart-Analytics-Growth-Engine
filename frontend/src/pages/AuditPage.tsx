@@ -212,6 +212,14 @@ export default function AuditPage(): React.ReactElement {
               </p>
             </div>
 
+            {/* PK-1: profiler-degradation warning(s) — non-fatal, shown at review time */}
+            {session.warnings && session.warnings.length > 0 && (
+              <div className="mb-4 flex flex-col gap-2">
+                {session.warnings.map((w, i) => (
+                  <ErrorBanner key={i} message={w} variant="warning" />
+                ))}
+              </div>
+            )}
             {/* Phase 1 still genuinely running (timeout forwarded us here early) */}
             {stillProcessingPhase1 && (
               <div

@@ -61,6 +61,7 @@ class SessionOut(BaseModel):
     column_renames: dict[str, str] | None
     metadata_summary: str | None
     error_message: str | None
+    warnings: list[str] | None = None
 
 
 class AnomalyOut(BaseModel):
@@ -248,6 +249,7 @@ def _session_out(s: Session) -> SessionOut:
         column_renames=s.column_renames,  # type: ignore[attr-defined]
         metadata_summary=s.metadata_summary,  # type: ignore[attr-defined]
         error_message=s.error_message,  # type: ignore[attr-defined]
+        warnings=s.warnings,  # type: ignore[attr-defined]
     )
 
 

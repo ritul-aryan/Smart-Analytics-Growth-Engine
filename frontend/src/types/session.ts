@@ -53,6 +53,7 @@ export interface Session {
   column_renames: Record<string, string> | null;
   metadata_summary: string | null;
   error_message: string | null;
+  warnings: string[] | null;
 }
 
 // ---------------------------------------------------------------------------
