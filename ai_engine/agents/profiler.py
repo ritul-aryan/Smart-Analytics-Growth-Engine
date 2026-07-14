@@ -164,31 +164,50 @@ async def run_profiler(
                 domain_profile[col] = bounds.model_dump()
 
     profiled_count = len(domain_profile)
-    logger.info(
-        "Profiler: generated bounds for %d/%d numeric columns (%d/%d batches failed)",
-        profiled_count, len(numeric_cols), failed_batches, total_batches,
-    )
-
+    numeric_count = len(numeric_cols)
+    fully_profiled = failed_batches == 0 and profiled_count == numeric_count
+    if fully_profiled:
+        logger.info(
+            "Profiler: generated bounds for %d/%d numeric columns",
+            profiled_count, numeric_count,
+        )
+        audit_action = f"Domain profiling completed for all {profiled_count} numeric column(s)"
+        audit_reason = (
+            "LLM generated semantic validity bounds per column, enabling "
+            "logical-violation detection (out-of-range values such as negative ages)."
+        )
+    else:
+        missing = numeric_count - profiled_count
+        logger.warning(
+            "Profiler DEGRADED: bounds for only %d/%d numeric columns "
+            "(%d/%d batches failed) -- logical-violation checks disabled for %d column(s)",
+            profiled_count, numeric_count, failed_batches, total_batches, missing,
+        )
+        audit_action = (
+            f"Domain profiling DEGRADED: bounds for {profiled_count}/{numeric_count} "
+            f"numeric column(s)"
+            + (f" ({failed_batches}/{total_batches} batches failed after provider "
+               f"retries/fallback)" if failed_batches else "")
+        )
+        audit_reason = (
+            f"LLM domain profiling produced no bounds for {missing} numeric column(s), "
+            "so logical-violation detection (out-of-range values such as negative ages "
+            "or impossible readings) is DISABLED for those column(s) this run. This "
+            "usually means the LLM provider was unavailable (e.g. Ollama not running "
+            "and no Gemini key/quota available)."
+        )
     await auditor.log(
         agent_name="profiler",
         phase="phase1",
-        action=(
-            f"Domain profiling completed for {profiled_count} numeric columns"
-            + (f" ({failed_batches}/{total_batches} batches skipped after "
-               f"provider failure)" if failed_batches else "")
-        ),
-        reason=(
-            "LLM generated semantic validity bounds per column to enable "
-            "logical violation detection"
-        ),
+        action=audit_action,
+        reason=audit_reason,
         rows_affected=0,
         is_llm_decision=True,
         llm_prompt_summary=(
-            f"Batched domain profiling -- {len(numeric_cols)} columns in "
+            f"Batched domain profiling -- {numeric_count} column(s) in "
             f"{total_batches} batch(es)"
         ),
     )
-
     return {"domain_profile": domain_profile}
 
 
