@@ -329,6 +329,7 @@ async def _run_phase1_background(
                 df = result.get("df_working")
                 session_row.column_renames = result.get("column_renames")
                 session_row.metadata_summary = result.get("metadata_summary")
+                session_row.warnings = result.get("warnings") or None
                 if df is not None:
                     session_row.row_count = len(df)
                     session_row.col_count = len(df.columns)

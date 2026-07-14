@@ -79,7 +79,22 @@ async def run_phase1(
             df, zero_analysis, domain_profile, iqr_multiplier, null_density_threshold
         )
         quality_score = _compute_quality_score(anomaly_report, len(df))
-
+        # PK-1: surface a user-visible warning when the profiler could not produce
+        # semantic bounds (LLM provider unavailable). With no bounds, _t4_logical
+        # emits no LOGICAL_VIOLATION records, so out-of-range values pass undetected
+        # and the quality score is overstated. The pipeline still completes; this is
+        # the only signal the user gets at review time.
+        _numeric_cols = df.select_dtypes(include="number").columns.tolist()
+        _missing_bounds = [c for c in _numeric_cols if c not in domain_profile]
+        phase1_warnings: list[str] = []
+        if _missing_bounds:
+            phase1_warnings.append(
+                f"Semantic range checks were skipped for {len(_missing_bounds)} of "
+                f"{len(_numeric_cols)} numeric column(s) ({', '.join(_missing_bounds)}) "
+                "because the analysis model was unavailable. Out-of-range values "
+                "(e.g. negative ages or impossible readings) in those columns may not "
+                "have been flagged, and the data quality score may be overstated."
+            )
         await auditor.update_session_status("audit", quality_score_before=quality_score)
         await auditor.log(
             agent_name="orchestrator", phase="phase1",
@@ -90,6 +105,7 @@ async def run_phase1(
         return {"df_raw": df_raw, "df_working": df, "column_renames": renames,
                 "domain_profile": domain_profile, "zero_analysis": zero_analysis,
                 "anomaly_report": anomaly_report, "quality_score_before": quality_score,
+                "warnings": phase1_warnings,
                 "metadata_summary": _build_metadata_summary(df, anomaly_report, state["user_intent"])}
     except Exception as exc:
         logger.error("Orchestrator Phase 1 failed: %s", exc, exc_info=True)
