@@ -85,12 +85,19 @@ async def run_phase1(
         # and the quality score is overstated. The pipeline still completes; this is
         # the only signal the user gets at review time.
         _numeric_cols = df.select_dtypes(include="number").columns.tolist()
-        _missing_bounds = [c for c in _numeric_cols if c not in domain_profile]
+        # PK-1b: only warn about columns where a semantic range is meaningful.
+        # Binary 0/1 indicators (e.g. critical_flag) have no "range" to check, so
+        # exclude them from both the count and the named list.
+        def _is_continuous(col: str) -> bool:
+            _vals = set(df[col].dropna().unique())
+            return not _vals.issubset({0, 1})
+        _continuous_cols = [c for c in _numeric_cols if _is_continuous(c)]
+        _missing_bounds = [c for c in _continuous_cols if c not in domain_profile]
         phase1_warnings: list[str] = []
         if _missing_bounds:
             phase1_warnings.append(
                 f"Semantic range checks were skipped for {len(_missing_bounds)} of "
-                f"{len(_numeric_cols)} numeric column(s) ({', '.join(_missing_bounds)}) "
+                f"{len(_continuous_cols)} numeric column(s) ({', '.join(_missing_bounds)}) "
                 "because the analysis model was unavailable. Out-of-range values "
                 "(e.g. negative ages or impossible readings) in those columns may not "
                 "have been flagged, and the data quality score may be overstated."
