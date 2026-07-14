@@ -102,6 +102,7 @@ class GraphState(TypedDict):
     anomaly_report: NotRequired[list[AnomalyRecord]]
     quality_score_before: NotRequired[float]
     metadata_summary: NotRequired[str]
+    warnings: NotRequired[list[str]]
 
     # User-configurable thresholds (Section 8.3). Injected into the entry
     # state dict by backend/api/analyze.py from the request's Form fields;
