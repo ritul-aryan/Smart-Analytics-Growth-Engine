@@ -27,8 +27,11 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from backend.config import get_settings
+from backend.db.models import Session as SessionModel
+from backend.db.session import DbSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["files"])
@@ -116,7 +119,7 @@ async def upload_file(file: UploadFile) -> UploadResponse:
     "/download/{filename}",
     summary="Download a processed file by stored filename",
 )
-async def download_file(filename: str) -> FileResponse:
+async def download_file(filename: str, db: DbSession) -> FileResponse:
     """
     Stream a stored file back to the browser.
 
@@ -124,6 +127,13 @@ async def download_file(filename: str) -> FileResponse:
     ``abc123_clean.csv``) — not a full path.  The server resolves the
     file relative to the configured upload and processed directories.
     Path traversal sequences (``..``) are rejected with 400.
+
+    The Content-Disposition filename sent to the browser is upgraded to
+    a human-readable name derived from the session's original upload
+    (e.g. ``orders_2024_q4_clean.csv``) when the owning session can be
+    found. This is display-only — the on-disk path/lookup logic above
+    is unchanged, and it falls back to the bare stored filename if no
+    matching session exists.
     """
     settings = get_settings()
 
@@ -153,8 +163,31 @@ async def download_file(filename: str) -> FileResponse:
     if media_type is None:
         media_type = "application/octet-stream"
 
+    # Upgrade the download filename to a human-readable one, display-only.
+    # Falls back to the bare stored `filename` on any lookup miss.
+    display_name = filename
+    session_row: SessionModel | None = None
+    for suffix in ("_clean.csv", "_engineered.csv"):
+        if filename.endswith(suffix):
+            candidate_id = filename[: -len(suffix)]
+            try:
+                session_row = await db.get(SessionModel, uuid.UUID(candidate_id))
+            except ValueError:
+                session_row = None
+            if session_row is not None:
+                base = Path(session_row.original_filename).stem
+                display_name = f"{base}{suffix}"
+            break
+    else:
+        result = await db.execute(
+            select(SessionModel).where(SessionModel.stored_filename == filename)
+        )
+        session_row = result.scalar_one_or_none()
+        if session_row is not None:
+            display_name = session_row.original_filename
+
     return FileResponse(
         path=str(resolved),
-        filename=filename,
+        filename=display_name,
         media_type=media_type,
     )
