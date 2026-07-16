@@ -473,6 +473,134 @@ async def analyze_complete(
 
 
 # ---------------------------------------------------------------------------
+# POST /api/analyze/revise/{session_id}
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/revise/{session_id}",
+    response_model=AnalyzeCompleteResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Revise a completed session's decisions; create a new linked revision",
+)
+async def analyze_revise(
+    session_id: str,
+    body: AnalyzeCompleteRequest,
+    background_tasks: BackgroundTasks,
+    db: DbSession,
+) -> AnalyzeCompleteResponse:
+    """
+    Revision Flow: clone a parent session (its raw file reference + anomaly
+    set) into a brand-new session, apply the newly submitted decisions to the
+    clone's anomalies, and run Phase 2+3 against it. The parent session is left
+    completely untouched so its report is retained. Returns 202 with the NEW
+    session_id; poll GET /api/session/{id} until status is 'complete'.
+    """
+    try:
+        parent_uuid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session_id format")
+
+    parent = await db.get(Session, parent_uuid)
+    if parent is None:
+        raise HTTPException(status_code=404, detail="Parent session not found")
+
+    # Load the parent's RAW file record (points at the on-disk upload we reuse)
+    parent_raw = (
+        await db.execute(
+            select(File).where(
+                File.session_id == parent_uuid,
+                File.file_type == FileType.RAW,
+            ).limit(1)
+        )
+    ).scalar_one_or_none()
+    if parent_raw is None:
+        raise HTTPException(status_code=409, detail="Parent session has no raw file to revise")
+
+    # Load the parent's anomalies to clone (detection results are reused as-is)
+    parent_anoms = (
+        await db.execute(select(Anomaly).where(Anomaly.session_id == parent_uuid))
+    ).scalars().all()
+
+    # --- Create the new (revision) Session row, copying durable fields ---
+    revision = Session(
+        original_filename=parent.original_filename,
+        stored_filename=parent.stored_filename,
+        status=SessionStatus.PROCESSING,
+        user_intent=parent.user_intent,
+        llm_provider=parent.llm_provider,
+        row_count=parent.row_count,
+        col_count=parent.col_count,
+        quality_score_before=parent.quality_score_before,
+        column_renames=parent.column_renames,
+        parent_session_id=parent_uuid,
+    )
+    db.add(revision)
+    await db.flush()
+    revision_id = str(revision.id)
+
+    # --- Clone the RAW file record, reusing the SAME file on disk ---
+    db.add(File(
+        session_id=revision.id,
+        file_type=FileType.RAW,
+        storage_path=parent_raw.storage_path,
+        original_name=parent_raw.original_name,
+        size_bytes=parent_raw.size_bytes,
+        row_count=parent_raw.row_count,
+        col_count=parent_raw.col_count,
+    ))
+
+    # --- Clone anomalies onto the revision; decisions come from the request ---
+    # Match decisions by normalized (dashless hex) UUID: the frontend/API sends
+    # anomaly_ids as 32-char hex without dashes, while str(UUID) yields the
+    # dashed form -- so we normalize both sides to a.id.hex to avoid a silent
+    # no-match that would leave every cloned decision unset.
+    now = datetime.now(tz=timezone.utc)
+    decision_map = {d.anomaly_id.replace("-", ""): d for d in body.decisions}
+    for a in parent_anoms:
+        new_anom = Anomaly(
+            session_id=revision.id,
+            anomaly_type=a.anomaly_type,
+            column_name=a.column_name,
+            affected_rows=a.affected_rows,
+            null_rate=a.null_rate,
+            severity=a.severity,
+            details=a.details,
+            display_order=a.display_order,
+        )
+        db.add(new_anom)
+        await db.flush()
+        dec = decision_map.get(a.id.hex)
+        if dec:
+            new_anom.user_action = dec.action
+            new_anom.action_params = dec.params
+            new_anom.resolved_at = now
+
+    provider = revision.llm_provider or "gemini"
+    decisions_raw = [d.model_dump() for d in body.decisions]
+
+    # Commit so the background task's fresh AsyncSession sees the new rows,
+    # mirroring the explicit-commit invariant used by /start and /complete.
+    await db.commit()
+
+    background_tasks.add_task(
+        _run_phase23_background,
+        session_id=revision_id,
+        decisions=decisions_raw,
+        llm_provider=provider,
+    )
+    logger.info(
+        "Revision queued -- parent=%s revision=%s decisions=%d",
+        session_id, revision_id, len(decisions_raw),
+    )
+    return AnalyzeCompleteResponse(
+        session_id=revision_id,
+        status=SessionStatus.PROCESSING.value,
+        message="Revision pipeline started. Poll GET /api/session/{id} for status.",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Background task -- Phase 2+3
 # ---------------------------------------------------------------------------
 

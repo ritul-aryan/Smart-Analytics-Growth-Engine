@@ -54,6 +54,7 @@ export interface Session {
   metadata_summary: string | null;
   error_message: string | null;
   warnings: string[] | null;
+  parent_session_id: string | null;
 }
 
 // ---------------------------------------------------------------------------
