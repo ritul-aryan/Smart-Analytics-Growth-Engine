@@ -113,6 +113,9 @@ class Session(Base):
     # PK-1: non-fatal Phase-1 warnings (e.g. profiler could not generate semantic
     # bounds because the LLM was unavailable). Nullable JSON list of strings.
     warnings: Mapped[list[str] | None] = mapped_column(JSON)
+    # Revision Flow: when this session is a revision of an earlier one, points
+    # to the parent session's id. NULL for original (first-run) sessions.
+    parent_session_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
 
     anomalies: Mapped[list["Anomaly"]] = relationship(
         back_populates="session", cascade="all, delete-orphan", lazy="select"
