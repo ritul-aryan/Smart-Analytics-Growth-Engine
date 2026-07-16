@@ -62,6 +62,7 @@ class SessionOut(BaseModel):
     metadata_summary: str | None
     error_message: str | None
     warnings: list[str] | None = None
+    parent_session_id: str | None = None
 
 
 class AnomalyOut(BaseModel):
@@ -250,6 +251,7 @@ def _session_out(s: Session) -> SessionOut:
         metadata_summary=s.metadata_summary,  # type: ignore[attr-defined]
         error_message=s.error_message,  # type: ignore[attr-defined]
         warnings=s.warnings,  # type: ignore[attr-defined]
+        parent_session_id=str(s.parent_session_id) if s.parent_session_id else None,  # type: ignore[attr-defined]
     )
 
 
