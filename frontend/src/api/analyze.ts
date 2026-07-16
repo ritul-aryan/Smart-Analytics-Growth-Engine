@@ -102,3 +102,23 @@ export async function completeAnalysis(
   };
   return apiPost<AnalyzeCompleteResponse>("/api/analyze/complete", body);
 }
+
+// ---------------------------------------------------------------------------
+// Revision Flow -- revise a completed session's decisions
+// ---------------------------------------------------------------------------
+
+/**
+ * Clone a completed session into a new revision with edited decisions and
+ * re-run Phase 2+3. The parent session's report is retained. Returns 202
+ * with the NEW session_id -- poll getSession() until status === "complete".
+ */
+export async function reviseAnalysis(
+  parentSessionId: string,
+  decisions: UserDecision[],
+): Promise<AnalyzeCompleteResponse> {
+  const body: AnalyzeCompleteRequest = {
+    session_id: parentSessionId,
+    decisions,
+  };
+  return apiPost<AnalyzeCompleteResponse>(`/api/analyze/revise/${parentSessionId}`, body);
+}
