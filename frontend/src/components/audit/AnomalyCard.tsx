@@ -6,13 +6,74 @@
  * DANGER WARNING RULE (Section 6.3 / Bug 2):
  * If null_rate > 0.40 AND the user selects "drop_rows" on a MISSING_DATA
  * anomaly, display a red banner showing how many rows will be deleted.
+ *
+ * PLAIN-LANGUAGE LAYER:
+ * ANOMALY_LABELS gives each anomaly type a formal data-science name; the
+ * raw enum (e.g. ZERO_AS_MISSING) is never shown to the user. ANOMALY_DESCRIPTIONS
+ * explains each in plain language with a concrete example. ACTION_DESCRIPTIONS
+ * explains what each cleaning action does; these surface in an accessible
+ * info panel (mouse hover + keyboard focus) next to the Action selector so a
+ * non-technical user understands every option before choosing. Display-layer
+ * only -- the AnomalyType enum and the ACTIONS map are unchanged.
  */
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { Anomaly, AnomalyType, UserDecision } from "../../types/session";
 
 // Mirror of MISSING_DATA_DANGER_NULL_RATE in ai_engine/config.py
 const DANGER_NULL_RATE = 0.40;
+
+// ---------------------------------------------------------------------------
+// Plain-language display names + descriptions per anomaly type
+// Formal DS label on sight; description explains it with a concrete example.
+// Typed Record<AnomalyType, string> so every enum key MUST be present
+// (a missing key is a compile error, not a silent gap).
+// ---------------------------------------------------------------------------
+
+const ANOMALY_LABELS: Record<AnomalyType, string> = {
+  MISSING_DATA:           "Missing Values",
+  ZERO_AS_MISSING:        "Disguised Missing Values",
+  LOGICAL_VIOLATION:      "Domain Violations",
+  DUPLICATE_ROWS:         "Duplicate Records",
+  STATISTICAL_OUTLIER:    "Statistical Outliers",
+  HIGH_NULL_DENSITY_ROWS: "Sparse Records",
+  PII_DETECTED:           "Personally Identifiable Information (PII)",
+};
+
+const ANOMALY_DESCRIPTIONS: Record<AnomalyType, string> = {
+  MISSING_DATA:
+    "A cell has no value at all. For example, a customer's phone number field left blank.",
+  ZERO_AS_MISSING:
+    "A 0 that almost certainly means 'not recorded' rather than a real measurement. For example, a heart rate of 0 usually means the data wasn't captured — not that the patient's heart rate is actually zero.",
+  LOGICAL_VIOLATION:
+    "A value outside what's realistically possible for this column. For example, an age of -5, or an age of 999.",
+  DUPLICATE_ROWS:
+    "The exact same row appears more than once. For example, the same order entered twice by mistake.",
+  STATISTICAL_OUTLIER:
+    "A value far outside the normal range of the rest of the data. For example, one house priced at $50 million in a dataset where most homes are $200,000–$500,000.",
+  HIGH_NULL_DENSITY_ROWS:
+    "A row where most columns are blank, so it adds little useful information. For example, a survey where only 2 of 20 questions were answered.",
+  PII_DETECTED:
+    "A column that appears to contain private data, like a name, email, or ID number.",
+};
+
+// Plain-language explanation for every cleaning action, keyed by action value.
+// Rendered in the accessible info panel next to the Action selector.
+const ACTION_DESCRIPTIONS: Record<string, string> = {
+  keep_as_is:        "Leave these values untouched.",
+  keep_all:          "Leave everything as it is — make no change.",
+  drop_rows:         "Delete every row affected by this issue.",
+  drop_column:       "Remove this entire column from the dataset.",
+  fill_mean:         "Replace with the column's average value.",
+  fill_median:       "Replace with the middle value (steadier than the average when there are extremes).",
+  fill_mode:         "Replace with the most frequently occurring value.",
+  cap_iqr:           "Pull extreme values in to the normal range instead of deleting them.",
+  clamp_bounds:      "Force values back inside an allowed minimum and maximum.",
+  treat_as_missing:  "Mark these values as missing so they can be handled like other gaps.",
+  remove_duplicates: "Keep the first copy of each duplicated row and remove the rest.",
+  redact:            "Replace the private values with [REDACTED].",
+  hash_sha256:       "Scramble the values irreversibly (SHA-256) so they can't be read.",
+};
 
 // ---------------------------------------------------------------------------
 // Action definitions per anomaly type
@@ -101,6 +162,12 @@ export default function AnomalyCard({
   const actions = ACTIONS[anomaly.anomaly_type] ?? [];
   const selectedAction = decision?.action ?? "";
 
+  // Accessible info panel: open on mouse hover OR keyboard focus.
+  const [showActionHelp, setShowActionHelp] = useState(false);
+
+  const label = ANOMALY_LABELS[anomaly.anomaly_type] ?? anomaly.anomaly_type.replace(/_/g, " ");
+  const description = ANOMALY_DESCRIPTIONS[anomaly.anomaly_type] ?? "";
+
   // Prefer the true per-column count (details.total_flagged) so the number shown
   // matches what the janitor will actually change. Fall back to affected_rows for
   // older sessions whose anomaly records predate this field.
@@ -171,7 +238,7 @@ export default function AnomalyCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="font-semibold text-[var(--sage-text-primary)]">
-            {anomaly.anomaly_type.replace(/_/g, " ")}
+            {label}
           </h3>
           {anomaly.column_name && (
             <p className="text-xs text-[var(--sage-text-muted)]">
@@ -183,6 +250,13 @@ export default function AnomalyCard({
           {anomaly.severity}
         </span>
       </div>
+
+      {/* Plain-language description of what this anomaly type means */}
+      {description && (
+        <p className="mt-2 text-sm leading-relaxed text-[var(--sage-text-muted)]">
+          {description}
+        </p>
+      )}
 
       {/* Stats row */}
       <div className="mt-2 flex flex-wrap gap-4 text-sm text-[var(--sage-text-muted)]">
@@ -221,14 +295,54 @@ export default function AnomalyCard({
 
       {/* Action selector */}
       <div className="mt-4">
-        <label className="mb-1 block text-xs font-medium text-[var(--sage-text-muted)]">
-          Action
-        </label>
+        <div className="mb-1 flex items-center gap-1.5">
+          <label className="block text-xs font-medium text-[var(--sage-text-muted)]">
+            Action
+          </label>
+          {/* Accessible "what do these actions do?" info panel.
+              Opens on mouse hover AND keyboard focus (Tab to the icon). */}
+          <div
+            className="relative inline-flex"
+            onMouseEnter={() => setShowActionHelp(true)}
+            onMouseLeave={() => setShowActionHelp(false)}
+          >
+            <button
+              type="button"
+              aria-label="Explain each action"
+              aria-expanded={showActionHelp}
+              className="flex h-4 w-4 items-center justify-center rounded-full border border-[var(--sage-border-strong)] text-[10px] font-bold leading-none text-[var(--sage-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--sage-accent)]"
+              onFocus={() => setShowActionHelp(true)}
+              onBlur={() => setShowActionHelp(false)}
+            >
+              i
+            </button>
+            {showActionHelp && (
+              <div
+                role="tooltip"
+                className="absolute left-5 top-0 z-20 w-72 rounded-lg border border-[var(--sage-border-strong)] bg-[var(--sage-bg-base)] p-3 text-xs shadow-lg"
+              >
+                <p className="mb-2 font-semibold text-[var(--sage-text-primary)]">
+                  What each action does
+                </p>
+                <ul className="flex flex-col gap-1.5">
+                  {actions.map((a) => (
+                    <li key={a.value} className="text-[var(--sage-text-muted)]">
+                      <span className="font-medium text-[var(--sage-text-primary)]">
+                        {a.label}
+                      </span>
+                      {ACTION_DESCRIPTIONS[a.value] ? ` — ${ACTION_DESCRIPTIONS[a.value]}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
         <select
           value={selectedAction}
           onChange={(e) => handleActionChange(e.target.value)}
           className="w-full rounded-lg border border-[var(--sage-border-strong)] bg-[var(--sage-bg-base)] px-3 py-2 text-sm text-[var(--sage-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--sage-accent)]"
-          aria-label={`Action for ${anomaly.anomaly_type} on ${anomaly.column_name ?? "row-level"}`}
+          aria-label={`Action for ${label} on ${anomaly.column_name ?? "row-level"}`}
         >
           <option value="" disabled>
             — choose an action —
