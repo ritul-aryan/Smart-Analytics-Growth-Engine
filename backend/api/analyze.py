@@ -551,8 +551,12 @@ async def analyze_revise(
     ))
 
     # --- Clone anomalies onto the revision; decisions come from the request ---
+    # Match decisions by normalized (dashless hex) UUID: the frontend/API sends
+    # anomaly_ids as 32-char hex without dashes, while str(UUID) yields the
+    # dashed form -- so we normalize both sides to a.id.hex to avoid a silent
+    # no-match that would leave every cloned decision unset.
     now = datetime.now(tz=timezone.utc)
-    decision_map = {d.anomaly_id: d for d in body.decisions}
+    decision_map = {d.anomaly_id.replace("-", ""): d for d in body.decisions}
     for a in parent_anoms:
         new_anom = Anomaly(
             session_id=revision.id,
@@ -566,7 +570,7 @@ async def analyze_revise(
         )
         db.add(new_anom)
         await db.flush()
-        dec = decision_map.get(str(a.id))
+        dec = decision_map.get(a.id.hex)
         if dec:
             new_anom.user_action = dec.action
             new_anom.action_params = dec.params
