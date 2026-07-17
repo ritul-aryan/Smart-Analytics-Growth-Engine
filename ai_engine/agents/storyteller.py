@@ -143,6 +143,17 @@ def _is_engineered_feature(col: str) -> bool:
 # Deterministic insight generation
 # ---------------------------------------------------------------------------
 
+def _fmt(v: Any) -> str:
+    """Format a number for insight text: integers without a decimal, else 3 sig-figs."""
+    try:
+        f = float(v)
+        if f == int(f) and abs(f) < 1e15:
+            return str(int(f))
+        return f"{f:.3g}"
+    except Exception:
+        return str(v)
+
+
 def _generate_insight(
     chart_type: str,
     df: pd.DataFrame,
@@ -153,92 +164,192 @@ def _generate_insight(
     outlier_iqr_multiplier: float = DEFAULT_OUTLIER_IQR_MULTIPLIER,
 ) -> str:
     """
-    Generate one analytical sentence for a chart without an LLM call.
+    Generate a rich, multi-paragraph deterministic analysis for a chart
+    without an LLM call. Every statistic is computed from the DataFrame; every
+    technical term is explained in-line so a non-specialist can follow it.
+    Sections are separated by blank lines and prefixed with an UPPERCASE label
+    so the frontend can render them as headed blocks. Returns "" on any error
+    so a missing insight never blocks chart rendering.
 
-    Uses column statistics already computed from the DataFrame:
-      histogram  — skewness + modelling implication
-      box        — median, IQR, outlier count
-      heatmap    — strongest correlated pair (correlation matrix only)
-      line       — first/second half trend direction
-      splom      — static summary
-      scatter    — Spearman r between x and y
-    Returns "" on any error so a missing insight never blocks rendering.
-
-    outlier_iqr_multiplier: the SAME multiplier used by the real anomaly
-    detector for this session (state["outlier_iqr_multiplier"], default
-    DEFAULT_OUTLIER_IQR_MULTIPLIER). Previously this function used a
-    hardcoded 1.5x fence for the box-plot outlier count regardless of what
-    multiplier the user configured for actual detection, so the Overview/
-    Audit tab and this narrative could disagree on how many outliers a
-    column had (2026-07-03 architecture audit, decision log item 6).
+    outlier_iqr_multiplier: the SAME multiplier the real anomaly detector used
+    for this session, so the box-plot outlier count matches the Audit Log
+    (2026-07-03 architecture audit, decision log item 6).
     """
     try:
         if chart_type == "histogram" and x_col and x_col in df.columns:
             s = pd.to_numeric(df[x_col], errors="coerce").dropna()
+            if s.empty:
+                return ""
+            n = int(s.size)
             skew = float(s.skew())
+            kurt = float(s.kurtosis())
             mean_v = float(s.mean())
-            shape = ("right-skewed" if skew > STORYTELLER_SKEW_DIRECTION_THRESHOLD else
-                     "left-skewed" if skew < -STORYTELLER_SKEW_DIRECTION_THRESHOLD else "symmetric")
-            impl = ("A log transform may normalise this for modelling." if abs(skew) > 1.0
-                    else "Distribution is suitable for linear models as-is.")
-            return f"'{x_col}' is {shape} (skew={skew:.2f}, mean≈{mean_v:.3g}). {impl}"
+            med_v = float(s.median())
+            std_v = float(s.std())
+            cv = (std_v / abs(mean_v)) if mean_v else float("nan")
+            if skew > STORYTELLER_SKEW_DIRECTION_THRESHOLD:
+                shape = "right-skewed (a long tail of high values pulls the mean above the median)"
+            elif skew < -STORYTELLER_SKEW_DIRECTION_THRESHOLD:
+                shape = "left-skewed (a long tail of low values pulls the mean below the median)"
+            else:
+                shape = "approximately symmetric (values are balanced around the centre)"
+            cv_desc = (
+                "n/a" if cv != cv
+                else "low — values are tightly grouped relative to their size" if cv < 0.3
+                else "moderate" if cv < 0.7
+                else "high — values are widely dispersed relative to their size"
+            )
+            centre_agree = (
+                "close, consistent with the symmetric shape"
+                if abs(mean_v - med_v) <= 0.1 * (std_v + 1e-9)
+                else "noticeably apart, consistent with the skew noted above"
+            )
+            parts = [
+                f"WHAT THIS SHOWS — A histogram of '{x_col}', i.e. how its {n:,} values are "
+                f"distributed across their range. The x-axis groups values into bins; bar height "
+                f"is how many rows fall in each bin.",
+                f"SHAPE — The distribution is {shape}. Skewness = {skew:.2f}: skew measures "
+                f"asymmetry, where 0 is perfectly symmetric, positive means a right tail, negative "
+                f"a left tail, and |skew| > 1 is considered strongly skewed. Excess kurtosis = "
+                f"{kurt:.2f}: this measures tailedness (how heavy the tails / how many extreme "
+                f"values are present) relative to a normal distribution, where 0 matches a bell "
+                f"curve, positive means heavier tails/more outliers, negative means lighter tails.",
+                f"CENTRE & SPREAD — Mean = {_fmt(mean_v)}, median = {_fmt(med_v)}. The mean is the "
+                f"arithmetic average; the median is the middle value and is more robust to extremes. "
+                f"They are {centre_agree}. Standard deviation = {_fmt(std_v)} (the typical distance "
+                f"of a value from the mean); coefficient of variation = {cv:.2f} ({cv_desc}).",
+            ]
+            if abs(skew) > 1.0:
+                parts.append(
+                    "MODELLING IMPLICATION — Because the column is strongly skewed, a log or "
+                    "Box-Cox transform would compress the tail and bring the distribution closer to "
+                    "normal, which typically helps linear/parametric models (linear regression, "
+                    "logistic regression) that assume roughly symmetric inputs. Tree-based models "
+                    "(random forest, gradient boosting) are insensitive to skew and need no transform."
+                )
+            else:
+                parts.append(
+                    "MODELLING IMPLICATION — The distribution is close enough to symmetric to be "
+                    "used as-is in linear and parametric models without a transform. Standardisation "
+                    "(subtract mean, divide by SD) is still advisable if you mix this with features "
+                    "on different scales."
+                )
+            return "\n\n".join(parts)
 
         if chart_type == "box" and x_col and x_col in df.columns:
             s = pd.to_numeric(df[x_col], errors="coerce").dropna()
+            if s.empty:
+                return ""
             q1, med, q3 = float(s.quantile(0.25)), float(s.median()), float(s.quantile(0.75))
             iqr = q3 - q1
-            n_out = int(((s < q1 - outlier_iqr_multiplier * iqr) | (s > q3 + outlier_iqr_multiplier * iqr)).sum())
+            lo = q1 - outlier_iqr_multiplier * iqr
+            hi = q3 + outlier_iqr_multiplier * iqr
+            n_out = int(((s < lo) | (s > hi)).sum())
+            rng = float(s.max() - s.min())
+            parts = [
+                f"WHAT THIS SHOWS — A box plot of '{x_col}'. The box spans the interquartile range "
+                f"(IQR): its lower edge is Q1 (25th percentile), the line inside is the median (50th "
+                f"percentile), the upper edge is Q3 (75th percentile). The whiskers extend to values "
+                f"within {_fmt(outlier_iqr_multiplier)}× the IQR of the box; points beyond them are "
+                f"flagged as potential outliers.",
+                f"QUARTILES — Q1 = {_fmt(q1)}, median = {_fmt(med)}, Q3 = {_fmt(q3)}. This means 25% "
+                f"of values fall below {_fmt(q1)}, half below {_fmt(med)}, and 75% below {_fmt(q3)}. "
+                f"The IQR (the middle-50% span) = {_fmt(iqr)}; full range = {_fmt(rng)}.",
+            ]
             if n_out:
-                out_note = f"{n_out} outlier(s) flagged — review in the Audit Log."
+                parts.append(
+                    f"OUTLIERS — {n_out:,} value(s) lie beyond {_fmt(outlier_iqr_multiplier)}× IQR "
+                    f"from the box (below {_fmt(lo)} or above {_fmt(hi)}) and are flagged as "
+                    f"statistical outliers. This uses the SAME multiplier as the anomaly detector, "
+                    f"so this count matches the Audit Log. Review whether they are genuine extremes "
+                    f"(keep) or data-entry errors (treat/clamp)."
+                )
             else:
-                # Describe spread honestly instead of assuming a tight cluster:
-                # compare the middle-50% span (IQR) to the full range. A wide
-                # IQR relative to range means values are spread out (e.g. a
-                # uniform distribution), NOT clustered around the median.
-                full_range = float(s.max() - s.min())
-                if full_range > 0 and iqr / full_range > 0.4:
-                    out_note = "No outliers; values are spread fairly evenly across the range."
-                else:
-                    out_note = "No outliers; most values sit close to the median."
-            return f"Median={med:.3g}, IQR={iqr:.3g}. {out_note}"
+                spread = (
+                    "spread fairly evenly across the range (IQR is a large fraction of the full "
+                    "range — consistent with a uniform-like distribution)"
+                    if rng > 0 and iqr / rng > 0.4
+                    else "concentrated near the median (the middle 50% occupies only a small part "
+                    "of the full range)"
+                )
+                parts.append(
+                    f"OUTLIERS — None detected at {_fmt(outlier_iqr_multiplier)}× IQR. Values are {spread}."
+                )
+            return "\n\n".join(parts)
 
         if chart_type == "heatmap" and heatmap_cols and len(heatmap_cols) >= 2:
             corr = df[heatmap_cols].corr()
             mask = np.triu(np.ones(corr.shape, dtype=bool), k=1)
-            upper = corr.where(mask)
-            flat = upper.stack()
+            flat = corr.where(mask).stack()
             if flat.empty:
-                return "Correlation matrix highlights linear relationships between all numeric features."
-            abs_flat = flat.abs()
-            top_pair = abs_flat.idxmax()
+                return ""
+            top_pair = flat.abs().idxmax()
             top_r = float(flat.loc[top_pair])
-            direction = "positive" if top_r > 0 else "negative"
-            abs_r = abs(top_r)
-            if abs_r > STORYTELLER_COLLINEARITY_THRESHOLD:
-                impl = "High collinearity — consider dropping one feature for linear models."
-            elif abs_r >= 0.3:
-                impl = "Moderate association — potential candidate for an interaction feature."
-            elif abs_r >= 0.1:
-                impl = "Weak association."
+            ar = abs(top_r)
+            direction = (
+                "positive (they tend to rise together)" if top_r > 0
+                else "negative (as one rises, the other tends to fall)"
+            )
+            parts = [
+                f"WHAT THIS SHOWS — A correlation heatmap across {len(heatmap_cols)} continuous "
+                f"features. Each cell is the Pearson correlation coefficient r between two columns, "
+                f"ranging from -1 (perfect inverse) through 0 (no linear relationship) to +1 "
+                f"(perfect direct). Colour encodes sign and strength.",
+                f"STRONGEST RELATIONSHIP — '{top_pair[0]}' and '{top_pair[1]}', r = {top_r:.2f}, "
+                f"{direction}. r² = {top_r ** 2:.2f}, meaning about {top_r ** 2 * 100:.0f}% of the "
+                f"variation in one is linearly explained by the other.",
+            ]
+            if ar > STORYTELLER_COLLINEARITY_THRESHOLD:
+                parts.append(
+                    "IMPLICATION — This is high collinearity. Two features carrying nearly the same "
+                    "information can destabilise linear-model coefficients (multicollinearity); "
+                    "consider dropping one or combining them. Tree models are unaffected."
+                )
+            elif ar >= 0.3:
+                parts.append(
+                    "IMPLICATION — A moderate association. Potentially useful as an interaction "
+                    "feature, but the two features are not redundant."
+                )
             else:
-                impl = "No meaningful linear association between the numeric features."
-            return (f"Strongest pair: '{top_pair[0]}' & '{top_pair[1]}' "
-                    f"({direction}, r={top_r:.2f}). {impl}")
+                parts.append(
+                    "IMPLICATION — Even the strongest pair is weak, so there is little linear "
+                    "redundancy between these features — each contributes largely independent "
+                    "information. Note Pearson r only captures LINEAR association; non-linear "
+                    "relationships could still exist and would not show here."
+                )
+            return "\n\n".join(parts)
 
         if chart_type == "line" and y_col and y_col in df.columns:
             s = pd.to_numeric(df[y_col], errors="coerce").dropna()
             if len(s) >= 4:
                 h = len(s) // 2
                 pct = (s.iloc[h:].mean() - s.iloc[:h].mean()) / (abs(s.iloc[:h].mean()) + 1e-9) * 100
-                trend = ("upward" if pct > STORYTELLER_TREND_PCT_THRESHOLD
-                         else "downward" if pct < -STORYTELLER_TREND_PCT_THRESHOLD else "flat")
-                return f"'{y_col}' shows a {trend} trend ({pct:+.1f}% shift, second half vs first)."
+                trend = (
+                    "upward" if pct > STORYTELLER_TREND_PCT_THRESHOLD
+                    else "downward" if pct < -STORYTELLER_TREND_PCT_THRESHOLD else "flat"
+                )
+                return (
+                    f"WHAT THIS SHOWS — A time-ordered line of '{y_col}'.\n\n"
+                    f"TREND — Comparing the mean of the second half of the series to the first half "
+                    f"gives a {pct:+.1f}% shift, i.e. a {trend} trend. This is a coarse "
+                    f"first-vs-second-half comparison, not a fitted regression; it flags direction, "
+                    f"not statistical significance. Seasonality or short-term cycles would need a "
+                    f"time-series decomposition to detect."
+                )
+            return ""
 
         if chart_type == "splom":
-            return ("Scatter matrix shows pairwise relationships across all continuous features. "
-                    "Diagonal bands indicate strong correlation; clusters may reveal segmentation opportunities.")
+            return (
+                "WHAT THIS SHOWS — A scatter-plot matrix (SPLOM): every continuous feature plotted "
+                "against every other. Off-diagonal cells are pairwise scatter plots; the diagonal "
+                "shows each feature's own distribution.\n\n"
+                "HOW TO READ IT — Look for tight diagonal bands (strong linear correlation), curved "
+                "bands (non-linear relationships that a single correlation number would miss), and "
+                "separated clusters (possible sub-groups worth segmenting). Because it shows raw "
+                "pairwise structure, it surfaces relationships that summaries like Pearson r can hide."
+            )
 
-        if chart_type in ("scatter", ) and x_col and y_col and x_col in df.columns and y_col in df.columns:
+        if chart_type in ("scatter",) and x_col and y_col and x_col in df.columns and y_col in df.columns:
             xa = pd.to_numeric(df[x_col], errors="coerce")
             ya = pd.to_numeric(df[y_col], errors="coerce")
             mask2 = xa.notna() & ya.notna()
@@ -247,15 +358,22 @@ def _generate_insight(
                     warnings.simplefilter("ignore")
                     r, _ = sp_stats.spearmanr(xa[mask2], ya[mask2])
                 r_f = float(r)
-                strength = ("strong" if abs(r_f) > STORYTELLER_CORR_STRONG_THRESHOLD
-                            else "moderate" if abs(r_f) > STORYTELLER_CORR_MODERATE_THRESHOLD else "weak")
+                strength = (
+                    "strong" if abs(r_f) > STORYTELLER_CORR_STRONG_THRESHOLD
+                    else "moderate" if abs(r_f) > STORYTELLER_CORR_MODERATE_THRESHOLD else "weak"
+                )
                 direction = "positive" if r_f > 0 else "negative"
                 candidate = abs(r_f) > STORYTELLER_CORR_FEATURE_CANDIDATE_THRESHOLD
-                return (f"Spearman r={r_f:.2f} ({strength} {direction} correlation). "
-                        f"{'This relationship is a candidate model feature.' if candidate else 'Limited signal — consider polynomial or interaction features.'}")
+                return (
+                    f"WHAT THIS SHOWS — A scatter plot of '{y_col}' against '{x_col}', one point per row.\n\n"
+                    f"RELATIONSHIP — Spearman r = {r_f:.2f} ({strength} {direction}). Spearman measures "
+                    f"monotonic association on ranks (do they move together in order?), so unlike Pearson "
+                    f"it also captures non-linear-but-consistent trends and resists outliers. "
+                    f"{'This is a candidate model feature.' if candidate else 'Limited linear signal — a polynomial or interaction term may extract more.'}"
+                )
+        return ""
     except Exception:
-        pass
-    return ""
+        return ""
 
 
 # ---------------------------------------------------------------------------

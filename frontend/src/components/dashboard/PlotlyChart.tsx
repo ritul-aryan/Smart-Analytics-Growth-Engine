@@ -266,14 +266,43 @@ export default function PlotlyChart({
         role="img"
       />
 
-      {/* Optional insight text */}
+      {/* Optional insight text.
+          The storyteller now returns a multi-section analysis: sections are
+          separated by a blank line ("\n\n") and each begins with an uppercase
+          "LABEL —" prefix (e.g. "WHAT THIS SHOWS —", "SHAPE —"). Render each
+          section as its own paragraph with the label styled as a small heading.
+          Falls back gracefully to a single paragraph for legacy single-line
+          insights that contain no blank-line separators. Display-only; the rich
+          full-page treatment is a redesign item. */}
       {chart.insight_text && (
         <div className="border-t border-[rgba(255,255,255,0.07)] bg-[var(--sage-accent-soft)] px-4 py-3">
           <div className="flex items-start gap-2.5">
             <span className="mt-0.5 shrink-0 rounded bg-[var(--sage-accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--sage-accent)]">
               Insight
             </span>
-            <p className="text-xs leading-relaxed text-[#9097A3]">{chart.insight_text}</p>
+            <div className="flex min-w-0 flex-col gap-2">
+              {chart.insight_text.split("\n\n").map((section, i) => {
+                const dashIdx = section.indexOf(" — ");
+                const hasLabel =
+                  dashIdx > 0 && section.slice(0, dashIdx) === section.slice(0, dashIdx).toUpperCase();
+                if (hasLabel) {
+                  const label = section.slice(0, dashIdx);
+                  const body = section.slice(dashIdx + 3);
+                  return (
+                    <p key={i} className="text-xs leading-relaxed text-[#9097A3]">
+                      <span className="font-semibold text-[#ECEEF2]">{label}</span>
+                      {" — "}
+                      {body}
+                    </p>
+                  );
+                }
+                return (
+                  <p key={i} className="text-xs leading-relaxed text-[#9097A3]">
+                    {section}
+                  </p>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
