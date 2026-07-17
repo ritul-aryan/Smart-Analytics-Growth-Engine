@@ -61,6 +61,12 @@
   --sage-low-soft:      rgba(56, 189, 248, 0.14);
   --sage-good:          #34D399;
   --sage-good-soft:     rgba(52, 211, 153, 0.14);
+  /* Redesign refinement tokens (additive) -- see design-direction note below */
+  --sage-bg-panel:      #0B0D12;
+  --sage-font-mono:     ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --sage-radius-sm:     8px;
+  --sage-radius-md:     11px;
+  --sage-radius-lg:     14px;
 }
 
 /* ---------------------------------------------------------------------------
@@ -92,6 +98,9 @@ html.light {
   --sage-low-soft:      rgba(2, 132, 199, 0.10);
   --sage-good:          #059669;
   --sage-good-soft:     rgba(5, 150, 105, 0.10);
+  /* --sage-bg-panel: sidebar/chrome slightly lighter than card in light mode,
+     mirroring the mockup's darker-than-card panel tone inverted for light. */
+  --sage-bg-panel:      #F4F5F7;
 }
 
 /* ---------------------------------------------------------------------------
