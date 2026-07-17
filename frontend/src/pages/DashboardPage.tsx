@@ -24,7 +24,7 @@ import { useSessionStore } from "../store/sessionStore";
 
 import TopBar from "../components/layout/TopBar";
 import TabBar from "../components/layout/TabBar";
-import DataHealthPanel from "../components/dashboard/DataHealthPanel";
+import DataHealthPanel, { StatStrip } from "../components/dashboard/DataHealthPanel";
 import NarrativePanel from "../components/dashboard/NarrativePanel";
 import PlotlyChart from "../components/dashboard/PlotlyChart";
 import CustomVizPanel from "../components/dashboard/CustomVizPanel";
@@ -149,6 +149,7 @@ export default function DashboardPage(): React.ReactElement {
             >
               {activeTab === 0 && (
                 <div className="space-y-6">
+                  <StatStrip session={session} />
                   {eda_narrative && <NarrativePanel narrative={eda_narrative} />}
                   <DataHealthPanel session={session} narrative={eda_narrative} />
                 </div>

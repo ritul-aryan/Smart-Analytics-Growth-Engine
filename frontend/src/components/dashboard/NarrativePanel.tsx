@@ -83,7 +83,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function NarrativePanel({ narrative }: NarrativePanelProps): React.ReactElement {
   const {
-    ml_readiness_score, ml_readiness_notes,
+    ml_readiness_score,
     top_correlations, missingness_hotspots,
     intent_recommendation,
     row_count, col_count, numeric_cols, categorical_cols, datetime_cols,
@@ -123,15 +123,6 @@ export default function NarrativePanel({ narrative }: NarrativePanelProps): Reac
             >
               {readinessLabel(ml_readiness_score)} · {ml_readiness_score.toFixed(1)} / 100
             </span>
-            {ml_readiness_notes.length > 0 && (
-              <ul className="mt-3 w-full space-y-1.5">
-                {ml_readiness_notes.map((n, i) => (
-                  <li key={i} className="flex gap-1.5 text-xs text-[var(--sage-high)]">
-                    <span className="shrink-0">⚠</span><span>{n}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
         </Section>
 

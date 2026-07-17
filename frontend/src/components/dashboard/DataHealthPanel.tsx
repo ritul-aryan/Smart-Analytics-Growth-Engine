@@ -4,18 +4,20 @@
  * Overview tab — data quality panels beneath the narrative.
  *
  * Layout:
- *   Row 1: stat strip (rows / cols / file / status)
- *   Row 2: quality score gauges (half-circle SVG arcs) + anomaly notes
- *   Row 3: missingness heatmap (if any)
- *   Row 4: correlation panel (if any)
- *   Row 5: column stats table
+ *   Row 1: data quality score gauges + anomalies & insights card
+ *   Row 2: missingness heatmap (if any)
+ *   Row 3: column statistics table (titled)
+ *
+ * Note: StatStrip is exported and rendered by DashboardPage at the very top
+ * of the Overview tab (above the EDA Narrative), so it is not rendered here.
+ * The Top Correlations panel was removed because it is already shown in the
+ * EDA Narrative hero above.
  */
 
 import React from "react";
 import QualityScoreGauge from "./QualityScoreGauge";
 import ColumnStatsTable from "./ColumnStatsTable";
 import MissingnessHeatmap from "./MissingnessHeatmap";
-import CorrelationPanel from "./CorrelationPanel";
 import type { Session } from "../../types/session";
 import type { EdaNarrative } from "../../types/chart";
 
@@ -26,10 +28,10 @@ interface DataHealthPanelProps {
 }
 
 // ---------------------------------------------------------------------------
-// Stat strip
+// Stat strip (exported — rendered by DashboardPage at top of Overview tab)
 // ---------------------------------------------------------------------------
 
-function StatStrip({ session }: { session: Session }): React.ReactElement {
+export function StatStrip({ session }: { session: Session }): React.ReactElement {
   const items = [
     { label: "Rows",    value: session.row_count != null ? session.row_count.toLocaleString() : "—" },
     { label: "Columns", value: session.col_count != null ? String(session.col_count) : "—" },
@@ -85,13 +87,10 @@ export default function DataHealthPanel({
 }: DataHealthPanelProps): React.ReactElement {
   const colStats     = narrative?.column_stats         ?? [];
   const hotspots     = narrative?.missingness_hotspots ?? [];
-  const correlations = narrative?.top_correlations     ?? [];
   const anomalyNotes = narrative?.anomaly_notes        ?? [];
 
   return (
     <div className={["space-y-5", className].join(" ")}>
-
-      <StatStrip session={session} />
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)] p-5">
@@ -110,10 +109,11 @@ export default function DataHealthPanel({
 
       {hotspots.length > 0 && <MissingnessHeatmap hotspots={hotspots} />}
 
-      {correlations.length > 0 && <CorrelationPanel correlations={correlations} />}
-
       {colStats.length > 0 ? (
-        <ColumnStatsTable columns={colStats} />
+        <div>
+          <h3 className="mb-3 text-sm font-semibold text-[var(--sage-text-primary)]">Column Statistics</h3>
+          <ColumnStatsTable columns={colStats} />
+        </div>
       ) : (
         <div className="rounded-xl border border-dashed border-[var(--sage-border-strong)] p-8 text-center">
           <p className="text-sm text-[var(--sage-text-muted)]">
