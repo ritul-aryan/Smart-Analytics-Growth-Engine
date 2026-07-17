@@ -212,7 +212,12 @@ export default function Sidebar(): React.ReactElement {
       ].join(" ")}
     >
       {/* Header */}
-      <div className="flex h-14 shrink-0 items-center justify-between px-3">
+      <div
+        className={[
+          "flex shrink-0 items-center",
+          collapsed ? "flex-col gap-2 px-0 py-3" : "h-14 justify-between px-3",
+        ].join(" ")}
+      >
         <button
           type="button"
           onClick={() => navigate("/")}
@@ -252,10 +257,10 @@ export default function Sidebar(): React.ReactElement {
       <div className="mx-3 h-px bg-[var(--sage-border)]" />
 
       {/* Session history */}
-      <div className="flex-1 overflow-hidden py-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden py-3">
         {!collapsed && (
           <>
-            <p className="mb-1.5 px-3 text-xs font-semibold uppercase tracking-widest text-[var(--sage-text-muted)]">
+            <p className="mb-1.5 shrink-0 px-3 text-xs font-semibold uppercase tracking-widest text-[var(--sage-text-muted)]">
               History
             </p>
             <SessionHistory />

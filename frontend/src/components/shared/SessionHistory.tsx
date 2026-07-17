@@ -232,7 +232,7 @@ export default function SessionHistory(): React.ReactElement {
   }
 
   return (
-    <div className="space-y-1.5 overflow-y-auto px-2">
+    <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-2">
       {sessions.map((s) => (
         <SessionCard
           key={s.id}

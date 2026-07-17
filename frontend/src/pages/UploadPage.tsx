@@ -153,7 +153,7 @@ export default function UploadPage(): React.ReactElement {
   // -------------------------------------------------------------------------
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-12">
+    <main className="flex flex-1 flex-col items-center overflow-y-auto px-4 py-12">
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="mb-8 text-center">

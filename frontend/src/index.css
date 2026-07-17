@@ -114,6 +114,39 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
+ * Scrollbars -- themed to match the SAGE.html prototype (WebKit only;
+ * Firefox falls back to default browser chrome, which is acceptable here).
+ * -------------------------------------------------------------------------- */
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 150, 170, 0.22);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 150, 170, 0.4);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Utility for elements that should hide their scrollbar entirely (e.g. TabBar) */
+.scrollbar-none {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge legacy */
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
  * Tab panel entrance animation
  * Applied to the active tab panel in DashboardPage.
  * -------------------------------------------------------------------------- */
