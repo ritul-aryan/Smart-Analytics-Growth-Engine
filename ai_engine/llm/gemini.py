@@ -74,6 +74,17 @@ def _rate_limit_wait(attempt: int) -> float:
     )
 
 
+# A 429/quota error means the account's quota is exhausted for this window --
+# it will not clear in the few seconds a retry loop can wait, unlike a
+# transient network blip. Burning LLM_MAX_RETRIES real attempts against an
+# exhausted quota (measured: 141s for a single call -- 3 attempts plus
+# 4.1s+8.7s+16.3s backoff) just delays the ALREADY-WORKING Ollama fallback
+# in factory.py for no benefit. Fail fast on the first 429 instead so the
+# chain falls over to Ollama in ~seconds. Non-quota transient errors keep
+# the full LLM_MAX_RETRIES behaviour, since those genuinely can clear fast.
+RATE_LIMIT_FAST_FAIL_ATTEMPTS: int = 1
+
+
 class GeminiProvider(LLMProvider):
     """
     LLM provider backed by Google Gemini via LangChain.
@@ -118,8 +129,9 @@ class GeminiProvider(LLMProvider):
         """
         messages = self._build_messages(prompt, system)
         last_exc: Exception | None = None
+        max_attempts = LLM_MAX_RETRIES
 
-        for attempt in range(LLM_MAX_RETRIES):
+        for attempt in range(max_attempts):
             try:
                 async with LLM_SEMAPHORE:
                     response = await self._model.ainvoke(messages)
@@ -129,22 +141,32 @@ class GeminiProvider(LLMProvider):
             except Exception as exc:
                 last_exc = exc
                 if _is_rate_limit(exc):
+                    # Quota exhaustion won't clear in a few seconds -- fail fast
+                    # after RATE_LIMIT_FAST_FAIL_ATTEMPTS so Ollama fallback
+                    # kicks in immediately instead of burning the full retry chain.
+                    if attempt + 1 >= RATE_LIMIT_FAST_FAIL_ATTEMPTS:
+                        logger.warning(
+                            "Gemini 429 rate-limit (quota exhausted) -- "
+                            "failing fast after %d attempt(s) to fall back to Ollama",
+                            attempt + 1,
+                        )
+                        break
                     wait = _rate_limit_wait(attempt)
                     logger.warning(
                         "Gemini 429 rate-limit (attempt %d/%d); backing off %.1fs",
-                        attempt + 1, LLM_MAX_RETRIES, wait,
+                        attempt + 1, max_attempts, wait,
                     )
                 else:
                     wait = LLM_RETRY_DELAY_SECONDS * (2 ** attempt)
                     logger.warning(
                         "Gemini attempt %d/%d failed: %s -- retrying in %.1fs",
-                        attempt + 1, LLM_MAX_RETRIES, exc, wait,
+                        attempt + 1, max_attempts, exc, wait,
                     )
                 await asyncio.sleep(wait)
 
         raise LLMProviderError(
             self.name,
-            f"All {LLM_MAX_RETRIES} attempts failed.",
+            f"All attempts failed (fast-failed on rate-limit).",
             cause=last_exc,
         )
 
@@ -163,8 +185,9 @@ class GeminiProvider(LLMProvider):
         """
         messages = self._build_messages(prompt, system)
         last_exc: Exception | None = None
+        max_attempts = LLM_MAX_RETRIES
 
-        for attempt in range(LLM_MAX_RETRIES):
+        for attempt in range(max_attempts):
             try:
                 structured = self._model.with_structured_output(schema)
                 async with LLM_SEMAPHORE:
@@ -180,21 +203,31 @@ class GeminiProvider(LLMProvider):
             except Exception as exc:
                 last_exc = exc
                 if _is_rate_limit(exc):
+                    # Quota exhaustion won't clear in a few seconds -- fail fast
+                    # after RATE_LIMIT_FAST_FAIL_ATTEMPTS so Ollama fallback
+                    # kicks in immediately instead of burning the full retry chain.
+                    if attempt + 1 >= RATE_LIMIT_FAST_FAIL_ATTEMPTS:
+                        logger.warning(
+                            "Gemini JSON 429 rate-limit (quota exhausted) -- "
+                            "failing fast after %d attempt(s) to fall back to Ollama",
+                            attempt + 1,
+                        )
+                        break
                     wait = _rate_limit_wait(attempt)
                     logger.warning(
                         "Gemini JSON 429 rate-limit (attempt %d/%d); backing off %.1fs",
-                        attempt + 1, LLM_MAX_RETRIES, wait,
+                        attempt + 1, max_attempts, wait,
                     )
                 else:
                     wait = LLM_RETRY_DELAY_SECONDS * (2 ** attempt)
                     logger.warning(
                         "Gemini JSON attempt %d/%d failed: %s -- retrying in %.1fs",
-                        attempt + 1, LLM_MAX_RETRIES, exc, wait,
+                        attempt + 1, max_attempts, exc, wait,
                     )
                 await asyncio.sleep(wait)
 
         raise LLMProviderError(
             self.name,
-            f"All {LLM_MAX_RETRIES} JSON attempts failed.",
+            f"All JSON attempts failed (fast-failed on rate-limit).",
             cause=last_exc,
         )
