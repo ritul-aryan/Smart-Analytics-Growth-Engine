@@ -56,6 +56,72 @@ from ai_engine.llm.base import LLMProvider
 logger = logging.getLogger(__name__)
 
 
+class _ChartNarrativeResponse(BaseModel):
+    """Batched LLM domain-narrative response: maps chart title -> one paragraph.
+
+    An empty string for a title means the model judged there was nothing
+    genuinely dataset-specific to add beyond the deterministic statistics
+    (the anti-filler rule). Such entries are dropped, not rendered.
+    """
+
+    narratives: dict[str, str]
+
+
+_CHART_NARRATIVE_SYSTEM = (
+    "You are a senior data scientist writing a short domain interpretation for each "
+    "EDA chart. You are given each chart's title, type, columns, and the exact "
+    "statistics already computed for it, plus the user's stated analysis intent. "
+    "For each chart, add ONE short paragraph of genuinely useful, dataset-specific "
+    "domain insight that goes BEYOND restating the statistics -- what the pattern "
+    "plausibly means for this kind of data, or what to do next. "
+    "STRICT RULES: (1) Never invent numbers, correlations, or facts not present in "
+    "the provided statistics. (2) If a chart has nothing genuinely useful to add "
+    "beyond the statistics already shown, return an EMPTY STRING for that chart -- "
+    "do NOT pad, do NOT restate the stats, do NOT write filler. (3) Keep each "
+    "paragraph under 60 words. Return a JSON object with key 'narratives' mapping "
+    "each chart title (verbatim) to its paragraph (or empty string)."
+)
+
+
+async def _llm_chart_narratives(
+    specs: list[ChartSpec],
+    user_intent: str,
+    llm: LLMProvider,
+) -> dict[str, str]:
+    """Return {chart_title: domain_paragraph} from ONE batched LLM call.
+
+    Returns {} on any failure so the deterministic Piece-1 insight text is
+    never blocked or degraded -- the domain layer is purely additive. Reuses
+    the provider chain's fast-fail/Ollama-fallback (ai_engine/llm), so a
+    rate-limited Gemini degrades to Ollama automatically, and a total LLM
+    failure simply yields no domain narrative rather than an error.
+    """
+    if not specs:
+        return {}
+
+    lines = [
+        f"User analysis intent: {user_intent or 'not specified'}.",
+        "",
+        "Charts (title | type | columns | computed statistics):",
+    ]
+    for sp in specs:
+        cols = ", ".join(c for c in (sp.get("x_column"), sp.get("y_column"), sp.get("color_column")) if c) or "n/a"
+        stats = (sp.get("insight_text") or "").replace("\n\n", " ")
+        lines.append(f"- TITLE: {sp['title']} | TYPE: {sp['chart_type']} | COLUMNS: {cols} | STATS: {stats}")
+    prompt = "\n".join(lines)
+
+    try:
+        resp = await llm.complete_json(
+            prompt, _ChartNarrativeResponse,
+            system=_CHART_NARRATIVE_SYSTEM, task="storytelling",
+        )
+        return dict(resp.narratives)
+    except Exception as exc:  # noqa: BLE001 -- any failure must degrade silently
+        logger.warning("LLM chart-narrative batch failed (%s: %s) -- "
+                       "keeping deterministic insights only", type(exc).__name__, exc)
+        return {}
+
+
 class _PrimaryChartSelection(BaseModel):
     chart_type: str
     x_column: str | None = None
@@ -566,6 +632,20 @@ async def run_storyteller(
         existing_notes = narrative.get("anomaly_notes") or []
         narrative["chart_selection_notes"] = skipped_charts
         narrative["anomaly_notes"] = list(existing_notes) + skipped_charts
+
+    # Optional LLM domain-narrative layer (default ON). Adds one short,
+    # dataset-specific paragraph per chart ON TOP of the deterministic insight,
+    # via a SINGLE batched LLM call. Purely additive: any failure leaves the
+    # Piece-1 deterministic text untouched. Flag defaults to True; when the
+    # Advanced Settings toggle is later threaded through to Phase 2+3 it can
+    # switch this off for speed. "DOMAIN INSIGHT — ..." uses the same
+    # "LABEL — text" section format the frontend already renders.
+    if state.get("enable_llm_chart_narrative", True):
+        domain = await _llm_chart_narratives(specs, user_intent, llm)
+        for spec in specs:
+            extra = (domain.get(spec["title"], "") or "").strip()
+            if extra:
+                spec["insight_text"] = spec["insight_text"] + "\n\nDOMAIN INSIGHT — " + extra
 
     # Auditor is the single writer of session.status (Section 6.4) — this
     # replaces the previous direct `session_row.status = "complete"` write,
