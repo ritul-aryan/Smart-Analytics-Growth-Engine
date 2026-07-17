@@ -154,7 +154,7 @@ function ProviderStatusWidget({ collapsed }: { collapsed: boolean }): React.Reac
           <ProviderIcon provider={activeProvider} size={20} />
           {/* Green status dot */}
           <span
-            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[var(--sage-good)] ring-1 ring-[var(--sage-bg-base)]"
+            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[var(--sage-good)] ring-1 ring-[var(--sage-bg-panel)]"
             aria-label="Connected"
           />
         </div>
@@ -207,7 +207,7 @@ export default function Sidebar(): React.ReactElement {
     <aside
       className={[
         "sticky top-0 flex h-screen flex-col border-r transition-all duration-200",
-        "border-[var(--sage-border)] bg-[var(--sage-bg-base)]",
+        "border-[var(--sage-border)] bg-[var(--sage-bg-panel)]",
         collapsed ? "w-14" : "w-60",
       ].join(" ")}
     >

@@ -43,7 +43,7 @@ import { getSession } from "../api/sessions";
 
 const TABS: import("../components/layout/TabBar").TabItem[] = [
   "Overview", "EDA Charts", "Custom Viz", "Chat",
-  "FE Report", "Audit Log", "Downloads",
+  "Feature Engineering", "Audit Log", "Downloads",
 ].map((label) => ({ label }));
 
 // Statuses that mean the pipeline is still running -- poll until it clears.

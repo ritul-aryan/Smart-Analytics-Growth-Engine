@@ -126,7 +126,7 @@ export default function TopBar({
           <Breadcrumbs items={breadcrumb} />
         )}
         <div className="flex items-center gap-2">
-          <h1 className="truncate text-sm font-semibold text-[var(--sage-text-primary)]">{title}</h1>
+          <h1 className="truncate text-sm font-semibold text-[var(--sage-text-primary)]" style={{ fontFamily: "var(--sage-font-mono)" }}>{title}</h1>
           {status && <StatusPill status={status} />}
         </div>
       </div>
