@@ -376,10 +376,17 @@ async def run_storyteller(
                             "box", df, col, None,
                             outlier_iqr_multiplier=outlier_iqr_multiplier)))
 
-    # Correlation heatmap: include OHE binary columns so product_category_* appear.
-    # Mask near-zero cells (|r| < STORYTELLER_HEATMAP_MIN_CORR) to 0 so the
-    # matrix stays readable after OHE expansion produces many sparse columns.
-    if len(heatmap_cols) >= 2:
+    # Skip notes: charts deliberately NOT generated because they carry no real
+    # signal. Surfaced in the narrative so a smaller portfolio reads as an
+    # intentional, honest choice rather than a missing feature.
+    skipped_charts: list[str] = []
+
+    # Correlation heatmap: only generate when at least one numeric pair exceeds
+    # STORYTELLER_HEATMAP_MIN_CORR. A matrix where every |r| is near zero is
+    # pure noise (its own caption would read "no meaningful association"), so
+    # skip it and explain why instead of rendering an empty red/grey grid.
+    heatmap_max_r = _max_offdiag_abs_r(df, heatmap_cols)
+    if len(heatmap_cols) >= 2 and heatmap_max_r is not None and heatmap_max_r >= STORYTELLER_HEATMAP_MIN_CORR:
         corr = df[heatmap_cols].corr().round(3)
         corr_masked = corr.where(corr.abs() >= STORYTELLER_HEATMAP_MIN_CORR, other=0.0)
         # Compute max label length for the frontend to size margins dynamically
@@ -391,13 +398,30 @@ async def run_storyteller(
                           "colorscale": "RdBu", "zmid": 0}],
                         {"_max_label_len": max_label_len}, 3,
                         insight=_generate_insight("heatmap", df, None, None, heatmap_cols=heatmap_cols)))
+    elif len(heatmap_cols) >= 2:
+        skipped_charts.append(
+            f"Correlation heatmap omitted: no numeric pair reached |r| ≥ "
+            f"{STORYTELLER_HEATMAP_MIN_CORR:.2f} (strongest was "
+            f"{heatmap_max_r:.2f}), so there was no meaningful linear "
+            f"relationship worth showing."
+        )
 
-    # Scatter matrix: continuous only (no binary/OHE or flag columns)
-    if STORYTELLER_SCATTER_MIN_COLS <= len(cont_cols) <= STORYTELLER_SCATTER_MAX_COLS:
+    # Scatter matrix: continuous only (no binary/OHE or flag columns), AND only
+    # when at least one pair shows real correlation -- a matrix of pure scatter
+    # clouds with no association teaches nothing, so skip and explain it too.
+    scatter_max_r = _max_offdiag_abs_r(df, cont_cols)
+    if (STORYTELLER_SCATTER_MIN_COLS <= len(cont_cols) <= STORYTELLER_SCATTER_MAX_COLS
+            and scatter_max_r is not None and scatter_max_r >= STORYTELLER_HEATMAP_MIN_CORR):
         dims = [{"label": c, "values": _nums(df, c)} for c in cont_cols]
         specs.append(_s("splom", "Scatter matrix", None, None, None,
                         [{"type": "splom", "dimensions": dims}], {}, 4,
                         insight=_generate_insight("splom", df, None, None)))
+    elif STORYTELLER_SCATTER_MIN_COLS <= len(cont_cols) <= STORYTELLER_SCATTER_MAX_COLS:
+        skipped_charts.append(
+            f"Scatter matrix omitted: the continuous features showed no "
+            f"pairwise correlation above |r| ≥ {STORYTELLER_HEATMAP_MIN_CORR:.2f}, "
+            f"so a matrix of uncorrelated scatter clouds would not have been informative."
+        )
 
     for dt_col in dt_cols[:1]:
         if cont_cols:
@@ -418,6 +442,12 @@ async def run_storyteller(
 
     narrative = _build_narrative(df, num_cols, user_intent, imputed_cols=imputed_cols,
                                   cleaning_actions=cleaning_actions)
+    # Append chart-selection notes so the UI can explain why the portfolio is
+    # smaller (intelligent selection), rather than leaving the user wondering.
+    if skipped_charts:
+        existing_notes = narrative.get("anomaly_notes") or []
+        narrative["chart_selection_notes"] = skipped_charts
+        narrative["anomaly_notes"] = list(existing_notes) + skipped_charts
 
     # Auditor is the single writer of session.status (Section 6.4) — this
     # replaces the previous direct `session_row.status = "complete"` write,
@@ -445,6 +475,24 @@ def _sample_df(df: pd.DataFrame) -> pd.DataFrame:
     if len(df) <= STORYTELLER_MAX_CHART_ROWS:
         return df
     return df.sample(n=STORYTELLER_MAX_CHART_ROWS, random_state=42)
+
+
+def _max_offdiag_abs_r(df: pd.DataFrame, cols: list[str]) -> float | None:
+    """Largest absolute pairwise Pearson |r| among cols, ignoring the diagonal.
+
+    Returns None when there are fewer than 2 columns or no valid correlation
+    can be computed. Used to decide whether a correlation-based chart carries
+    any real signal before it is generated -- a heatmap or scatter matrix in
+    which no pair exceeds STORYTELLER_HEATMAP_MIN_CORR shows the user nothing
+    useful, so it is skipped and explained rather than rendered as noise.
+    """
+    if len(cols) < 2:
+        return None
+    corr = df[cols].corr().abs()
+    mask = ~np.eye(len(cols), dtype=bool)
+    vals = corr.values[mask]
+    vals = vals[~np.isnan(vals)]
+    return float(vals.max()) if len(vals) else None
 
 
 def _nums(df: pd.DataFrame, col: str) -> list[float]:
