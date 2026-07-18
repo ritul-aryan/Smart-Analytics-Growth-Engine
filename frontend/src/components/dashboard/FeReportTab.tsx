@@ -11,8 +11,6 @@ import React from "react";
 import type { AuditLog } from "../../types/session";
 import type { EdaNarrative } from "../../types/chart";
 
-// Categorical transform badges mapped to prototype tokens.
-// DURATION shares the temporal (good) tokens with DATETIME_EXTRACTION.
 const TRANSFORM_COLOURS: Record<string, string> = {
   OHE:                 "bg-[var(--sage-accent-soft)] text-[var(--sage-accent)]",
   FREQUENCY_ENCODING:  "bg-[var(--sage-med-soft)] text-[var(--sage-med)]",
@@ -49,50 +47,56 @@ export default function FeReportTab({ feEntries, narrative }: Props): React.Reac
 
   return (
     <div className="space-y-4">
-      {/* Summary pills */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {TYPE_ORDER.map((t) => {
           const count = feEntries.filter((e) => e.reason === t).length;
           if (count === 0) return null;
           return (
-            <span key={t} className={["rounded-full px-3 py-1 text-xs font-medium", TRANSFORM_COLOURS[t] ?? TRANSFORM_FALLBACK].join(" ")}>
+            <span
+              key={t}
+              className={["rounded-full px-3 py-1 text-[10.5px] font-bold uppercase", TRANSFORM_COLOURS[t] ?? TRANSFORM_FALLBACK].join(" ")}
+              style={{ letterSpacing: "0.05em" }}
+            >
               {count} {t.replace("_", " ").toLowerCase()}
             </span>
           );
         })}
       </div>
-
-      {/* Transform table */}
       <div className="overflow-hidden rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)]">
+        <div className="border-b border-[var(--sage-border)] px-5 py-4">
+          <h3 className="text-sm font-semibold text-[var(--sage-text-primary)]">Transform Log</h3>
+          <p className="text-xs text-[var(--sage-text-muted)]">{feEntries.length} transform{feEntries.length === 1 ? "" : "s"} applied by the Feature Engineering agent</p>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-[var(--sage-border)] text-left">
                 {["Type", "Description", "Column", "Rows", "Time"].map((h) => (
-                  <th key={h} className="px-4 py-3 font-medium text-[var(--sage-text-muted)]">{h}</th>
+                  <th key={h} className="px-4 py-3 font-medium uppercase tracking-wide text-[var(--sage-text-dim)]" style={{ fontSize: "10.5px" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {feEntries.map((e, i) => (
-                <tr key={e.id} className={["border-b border-[var(--sage-border)]", i % 2 !== 0 ? "bg-[var(--sage-bg-overlay)]" : ""].join(" ")}>
+                <tr key={e.id} className={["border-b border-[var(--sage-border)] transition-colors hover:bg-[var(--sage-bg-overlay)]", i % 2 !== 0 ? "bg-[var(--sage-bg-overlay)]/40" : ""].join(" ")}>
                   <td className="px-4 py-2.5">
-                    <span className={["rounded px-2 py-0.5 font-mono text-[10px]", TRANSFORM_COLOURS[e.reason] ?? TRANSFORM_FALLBACK].join(" ")}>
+                    <span
+                      className={["rounded px-2 py-0.5 text-[10px] font-bold uppercase", TRANSFORM_COLOURS[e.reason] ?? TRANSFORM_FALLBACK].join(" ")}
+                      style={{ fontFamily: "var(--sage-font-mono)", letterSpacing: "0.04em" }}
+                    >
                       {e.reason}
                     </span>
                   </td>
                   <td className="max-w-[300px] truncate px-4 py-2.5 text-[var(--sage-text-primary)]" title={e.action}>{e.action}</td>
-                  <td className="px-4 py-2.5 font-mono text-[var(--sage-text-muted)]">{e.column_affected ?? "—"}</td>
-                  <td className="px-4 py-2.5 tabular-nums text-[var(--sage-text-primary)]">{e.rows_affected.toLocaleString()}</td>
-                  <td className="px-4 py-2.5 tabular-nums text-[var(--sage-text-muted)]">{new Date(e.timestamp).toLocaleTimeString()}</td>
+                  <td className="px-4 py-2.5 text-[var(--sage-text-muted)]" style={{ fontFamily: "var(--sage-font-mono)" }}>{e.column_affected ?? "—"}</td>
+                  <td className="px-4 py-2.5 tabular-nums text-[var(--sage-text-primary)]" style={{ fontFamily: "var(--sage-font-mono)" }}>{e.rows_affected.toLocaleString()}</td>
+                  <td className="px-4 py-2.5 tabular-nums text-[var(--sage-text-muted)]" style={{ fontFamily: "var(--sage-font-mono)" }}>{new Date(e.timestamp).toLocaleTimeString()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-
-      {/* ML readiness from narrative */}
       {narrative && (
         <div className="rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)] p-5">
           <div className="mb-3 flex items-center justify-between">
@@ -101,7 +105,7 @@ export default function FeReportTab({ feEntries, narrative }: Props): React.Reac
               "text-xl font-bold tabular-nums",
               narrative.ml_readiness_score >= 80 ? "text-[var(--sage-good)]"
                 : narrative.ml_readiness_score >= 50 ? "text-[var(--sage-high)]" : "text-[var(--sage-crit)]",
-            ].join(" ")}>
+            ].join(" ")} style={{ fontFamily: "var(--sage-font-mono)" }}>
               {narrative.ml_readiness_score.toFixed(1)}
               <span className="text-sm font-normal text-[var(--sage-text-muted)]"> / 100</span>
             </span>

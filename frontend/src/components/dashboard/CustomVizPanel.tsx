@@ -1,19 +1,7 @@
 /**
  * frontend/src/components/dashboard/CustomVizPanel.tsx
  *
- * Natural language chart builder for the Custom Viz tab.
- *
- * The user types a plain-English request (e.g. "Show me sales by region
- * as a bar chart").  The request is sent via POST /api/chat which detects
- * chart keywords and calls the LLM for a Plotly spec.  The returned chart
- * is rendered immediately and added to a scrollable saved-charts history.
- *
- * Saved charts persist in the DB (is_custom=true) so they survive refresh.
- * Each saved chart has a delete button (local state only — no delete API
- * endpoint required for v2).
- *
- * Usage:
- *   <CustomVizPanel sessionId={session.id} savedCharts={customCharts} />
+ * Natural language chart builder for the Custom Visualisation tab.
  */
 
 import React, { Component, useState } from "react";
@@ -21,10 +9,6 @@ import { useMutation } from "@tanstack/react-query";
 import { sendChatMessage } from "../../api/chat";
 import PlotlyChart from "./PlotlyChart";
 import type { ChartSpec } from "../../types/chart";
-
-// ---------------------------------------------------------------------------
-// Error boundary — catches invalid Plotly configs gracefully
-// ---------------------------------------------------------------------------
 
 interface EBState { hasError: boolean }
 
@@ -57,21 +41,11 @@ class ChartErrorBoundary extends Component<
   }
 }
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
 interface CustomVizPanelProps {
   sessionId: string;
-  /** Pre-loaded custom charts from GET /api/session/{id} (is_custom=true). */
   savedCharts?: ChartSpec[];
-  /** Extra Tailwind classes for the outer container. */
   className?: string;
 }
-
-// ---------------------------------------------------------------------------
-// Example prompts
-// ---------------------------------------------------------------------------
 
 const EXAMPLES = [
   "Show me the distribution of income as a histogram",
@@ -79,10 +53,6 @@ const EXAMPLES = [
   "Bar chart of count by city",
   "Box plot of score by category",
 ];
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export default function CustomVizPanel({
   sessionId,
@@ -132,17 +102,18 @@ export default function CustomVizPanel({
 
   return (
     <div className={["space-y-5", className].join(" ")}>
-
-      {/* Input card */}
       <div className="rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)] p-5">
-        <h3 className="mb-1 text-sm font-semibold text-[var(--sage-text-primary)]">
-          Custom Visualisation
-        </h3>
-        <p className="mb-4 text-xs text-[var(--sage-text-muted)]">
-          Describe a chart in plain English and the AI will generate it.
-        </p>
-
-        {/* Example prompts */}
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--sage-accent-soft)]">
+            <svg className="h-4 w-4 text-[var(--sage-accent)]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M10 2a.75.75 0 01.692.462l1.41 3.393 3.664.293a.75.75 0 01.428 1.317l-2.79 2.39.85 3.575a.75.75 0 01-1.12.813L10 12.347l-3.134 1.896a.75.75 0 01-1.12-.813l.85-3.575-2.79-2.39a.75.75 0 01.428-1.317l3.665-.293 1.41-3.393A.75.75 0 0110 2z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--sage-text-primary)]">Custom Visualisation</h3>
+            <p className="text-xs text-[var(--sage-text-muted)]">Describe a chart in plain English and the AI will generate it.</p>
+          </div>
+        </div>
         <div className="mb-3 flex flex-wrap gap-1.5">
           {EXAMPLES.map((ex) => (
             <button
@@ -159,8 +130,6 @@ export default function CustomVizPanel({
             </button>
           ))}
         </div>
-
-        {/* Input form */}
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             type="text"
@@ -188,13 +157,9 @@ export default function CustomVizPanel({
             {isPending ? "Generating…" : "Generate"}
           </button>
         </form>
-
-        {/* Error */}
         {lastError && (
           <p className="mt-2 text-xs text-[var(--sage-crit)]">{lastError}</p>
         )}
-
-        {/* Loading state */}
         {isPending && (
           <div className="mt-3 flex items-center gap-2 text-xs text-[var(--sage-text-dim)]">
             <div className="h-3 w-3 animate-spin rounded-full border border-[var(--sage-border-strong)] border-t-[var(--sage-accent)]" />
@@ -202,8 +167,6 @@ export default function CustomVizPanel({
           </div>
         )}
       </div>
-
-      {/* Saved charts */}
       {visibleCharts.length > 0 && (
         <div className="space-y-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sage-text-dim)]">
@@ -232,10 +195,13 @@ export default function CustomVizPanel({
           ))}
         </div>
       )}
-
-      {/* Empty state */}
       {visibleCharts.length === 0 && !isPending && (
-        <div className="rounded-xl border border-dashed border-[var(--sage-border-strong)] p-8 text-center">
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--sage-border-strong)] p-12 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--sage-bg-overlay)]">
+            <svg className="h-6 w-6 text-[var(--sage-text-dim)]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path d="M3 13h8V3H3v10zM13 21h8V11h-8v10zM13 3v6h8V3h-8zM3 21h8v-6H3v6z" />
+            </svg>
+          </div>
           <p className="text-sm text-[var(--sage-text-dim)]">
             No custom charts yet. Type a request above to generate one.
           </p>

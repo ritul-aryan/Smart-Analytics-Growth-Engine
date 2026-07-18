@@ -12,6 +12,24 @@ interface Props {
   auditLog: AuditLog[];
 }
 
+function FileIcon(): React.ReactElement {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M14 3v4a1 1 0 001 1h4" stroke="var(--sage-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 3h9l5 5v11a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="var(--sage-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DownloadIcon(): React.ReactElement {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3v12M12 15l-4-4M12 15l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function DownloadsTab({ session, auditLog }: Props): React.ReactElement {
   const files = [
     { label: "Raw upload",     filename: session.stored_filename,        desc: "Original file as uploaded — no modifications." },
@@ -38,35 +56,55 @@ export default function DownloadsTab({ session, auditLog }: Props): React.ReactE
     URL.revokeObjectURL(url);
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {files.map((f) => (
-          <a
-            key={f.filename}
-            href={`/api/download/${f.filename}`}
-            download
-            className="flex flex-col gap-2 rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)] p-6 transition-colors hover:border-[var(--sage-accent-border)]"
-          >
-            <span className="text-sm font-semibold text-[var(--sage-text-primary)]">{f.label}</span>
-            <span className="text-xs text-[var(--sage-text-muted)]">{f.desc}</span>
-            <span className="mt-1 break-all rounded bg-[var(--sage-accent-soft)] px-2 py-1 font-mono text-xs text-[var(--sage-accent)]">{f.filename}</span>
-          </a>
-        ))}
-      </div>
+  const linkFiles = files.map((f) => ({ ...f, href: `/api/download/${f.filename}` }));
 
-      <button
-        type="button"
-        onClick={downloadAuditCsv}
-        disabled={auditLog.length === 0}
-        className="flex w-full flex-col gap-2 rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)] p-6 text-left transition-colors hover:border-[var(--sage-accent-border)] disabled:cursor-not-allowed disabled:opacity-50 sm:max-w-sm"
-      >
-        <span className="text-sm font-semibold text-[var(--sage-text-primary)]">Audit Log CSV</span>
-        <span className="text-xs text-[var(--sage-text-muted)]">Full agent decision trace — {auditLog.length} entries.</span>
-        <span className="mt-1 break-all rounded bg-[var(--sage-accent-soft)] px-2 py-1 font-mono text-xs text-[var(--sage-accent)]">
-          {session.id}_audit_log.csv
-        </span>
-      </button>
+  return (
+    <div className="overflow-hidden rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)]">
+      <div className="border-b border-[var(--sage-border)] px-5 py-4">
+        <h3 className="text-sm font-semibold text-[var(--sage-text-primary)]">Downloads</h3>
+        <p className="text-xs text-[var(--sage-text-muted)]">Generated artifacts from this analysis run.</p>
+      </div>
+      <div className="divide-y divide-[var(--sage-border)]">
+        {linkFiles.map((f) => (
+          <div key={f.filename} className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--sage-bg-overlay)]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--sage-accent-soft)]">
+              <FileIcon />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-[var(--sage-text-primary)]">{f.label}</p>
+              <p className="text-xs text-[var(--sage-text-muted)]">{f.desc}</p>
+              <p className="mt-1 truncate text-xs text-[var(--sage-text-dim)]" style={{ fontFamily: "var(--sage-font-mono)" }}>{f.filename}</p>
+            </div>
+            <a
+              href={f.href}
+              download
+              className="flex shrink-0 items-center gap-2 rounded-lg border border-[var(--sage-border)] bg-[var(--sage-bg-overlay)] px-3.5 py-2 text-xs font-medium text-[var(--sage-text-primary)] transition-colors hover:border-[var(--sage-accent-border)]"
+            >
+              <DownloadIcon />
+              Download
+            </a>
+          </div>
+        ))}
+        <div className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--sage-bg-overlay)]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--sage-accent-soft)]">
+            <FileIcon />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-[var(--sage-text-primary)]">Audit Log CSV</p>
+            <p className="text-xs text-[var(--sage-text-muted)]">Full agent decision trace — {auditLog.length} entries.</p>
+            <p className="mt-1 truncate text-xs text-[var(--sage-text-dim)]" style={{ fontFamily: "var(--sage-font-mono)" }}>{session.id}_audit_log.csv</p>
+          </div>
+          <button
+            type="button"
+            onClick={downloadAuditCsv}
+            disabled={auditLog.length === 0}
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-[var(--sage-border)] bg-[var(--sage-bg-overlay)] px-3.5 py-2 text-xs font-medium text-[var(--sage-text-primary)] transition-colors hover:border-[var(--sage-accent-border)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <DownloadIcon />
+            Download
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

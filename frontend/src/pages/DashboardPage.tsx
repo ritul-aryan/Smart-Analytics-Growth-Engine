@@ -42,7 +42,7 @@ import { getSession } from "../api/sessions";
 // ---------------------------------------------------------------------------
 
 const TABS: import("../components/layout/TabBar").TabItem[] = [
-  "Overview", "EDA Charts", "Custom Viz", "Chat",
+  "Overview", "EDA Charts", "Custom Visualization", "Chat",
   "Feature Engineering", "Audit Log", "Downloads",
 ].map((label) => ({ label }));
 

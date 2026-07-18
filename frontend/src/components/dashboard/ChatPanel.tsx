@@ -2,17 +2,6 @@
  * frontend/src/components/dashboard/ChatPanel.tsx
  *
  * Persistent conversational Q&A panel for the Chat tab.
- *
- * Loads full history from the session's chat_messages on mount (via
- * GET /api/session/{id} which includes chat history).  Sends new messages
- * via POST /api/chat.  If the assistant response includes a chart spec it
- * is rendered inline using PlotlyChart.
- *
- * History persists across page refresh because all messages are stored
- * in the chat_messages DB table — this fixes prototype Limitation L17.
- *
- * Usage:
- *   <ChatPanel sessionId={session.id} initialMessages={chatMessages} />
  */
 
 import React, { useState, useRef, useEffect } from "react";
@@ -20,10 +9,6 @@ import { useMutation } from "@tanstack/react-query";
 import { sendChatMessage } from "../../api/chat";
 import PlotlyChart from "./PlotlyChart";
 import type { ChartSpec } from "../../types/chart";
-
-// ---------------------------------------------------------------------------
-// Local message type (union of DB history + optimistic local messages)
-// ---------------------------------------------------------------------------
 
 interface LocalMessage {
   id: string;
@@ -33,27 +18,27 @@ interface LocalMessage {
   timestamp?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
 interface ChatPanelProps {
   sessionId: string;
-  /** Pre-loaded history from GET /api/session/{id}. */
   initialMessages?: LocalMessage[];
-  /** Extra Tailwind classes for the outer container. */
   className?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Message bubble
-// ---------------------------------------------------------------------------
+function AssistantAvatar(): React.ReactElement {
+  return (
+    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--sage-accent)]">
+      <svg className="h-3.5 w-3.5 text-white" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path d="M10 2a.75.75 0 01.692.462l1.41 3.393 3.664.293a.75.75 0 01.428 1.317l-2.79 2.39.85 3.575a.75.75 0 01-1.12.813L10 12.347l-3.134 1.896a.75.75 0 01-1.12-.813l.85-3.575-2.79-2.39a.75.75 0 01.428-1.317l3.665-.293 1.41-3.393A.75.75 0 0110 2z" />
+      </svg>
+    </div>
+  );
+}
 
 function MessageBubble({ msg }: { msg: LocalMessage }): React.ReactElement {
   const isUser = msg.role === "user";
-
   return (
-    <div className={["flex", isUser ? "justify-end" : "justify-start"].join(" ")}>
+    <div className={["flex items-start gap-2.5", isUser ? "justify-end" : "justify-start"].join(" ")}>
+      {!isUser && <AssistantAvatar />}
       <div className={["max-w-[80%] space-y-2", isUser ? "items-end" : "items-start"].join(" ")}>
         <div
           className={[
@@ -75,13 +60,10 @@ function MessageBubble({ msg }: { msg: LocalMessage }): React.ReactElement {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Typing indicator
-// ---------------------------------------------------------------------------
-
 function TypingIndicator(): React.ReactElement {
   return (
-    <div className="flex justify-start">
+    <div className="flex items-start justify-start gap-2.5">
+      <AssistantAvatar />
       <div className="rounded-2xl rounded-tl-sm bg-[var(--sage-bg-overlay)] px-4 py-3">
         <div className="flex items-center gap-1">
           {[0, 1, 2].map((i) => (
@@ -97,10 +79,6 @@ function TypingIndicator(): React.ReactElement {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-
 export default function ChatPanel({
   sessionId,
   initialMessages = [],
@@ -110,7 +88,6 @@ export default function ChatPanel({
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom whenever messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -119,7 +96,6 @@ export default function ChatPanel({
     mutationFn: ({ message }: { message: string }) =>
       sendChatMessage(sessionId, message),
     onMutate: ({ message }) => {
-      // Optimistic user bubble
       setMessages((prev) => [
         ...prev,
         { id: crypto.randomUUID(), role: "user", content: message },
@@ -164,22 +140,27 @@ export default function ChatPanel({
         className,
       ].join(" ")}
     >
-      {/* Header */}
-      <div className="border-b border-[var(--sage-border)] px-4 py-3">
-        <h3 className="text-sm font-semibold text-[var(--sage-text-primary)]">
-          Chat
-        </h3>
-        <p className="text-xs text-[var(--sage-text-muted)]">
-          Ask anything about your dataset
-        </p>
+      <div className="flex items-center gap-3 border-b border-[var(--sage-border)] px-5 py-4">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--sage-accent-soft)]">
+          <svg className="h-4 w-4 text-[var(--sage-accent)]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.84 8.84 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-[var(--sage-text-primary)]">Chat</h3>
+          <p className="text-xs text-[var(--sage-text-muted)]">Ask anything about your dataset</p>
+        </div>
       </div>
-
-      {/* Message list */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[300px] max-h-[480px]">
+      <div className="flex-1 min-h-[500px] max-h-[70vh] space-y-3 overflow-y-auto p-5">
         {messages.length === 0 && (
-          <p className="py-8 text-center text-sm text-[var(--sage-text-dim)]">
-            No messages yet. Ask a question about your data.
-          </p>
+          <div className="flex h-full flex-col items-center justify-center gap-3 py-8 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--sage-bg-overlay)]">
+              <svg className="h-6 w-6 text-[var(--sage-text-dim)]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.84 8.84 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <p className="text-sm text-[var(--sage-text-dim)]">No messages yet. Ask a question about your data.</p>
+          </div>
         )}
         {messages.map((msg) => (
           <MessageBubble key={msg.id} msg={msg} />
@@ -187,8 +168,6 @@ export default function ChatPanel({
         {isPending && <TypingIndicator />}
         <div ref={bottomRef} />
       </div>
-
-      {/* Input */}
       <form
         onSubmit={handleSubmit}
         className="border-t border-[var(--sage-border)] p-3"
