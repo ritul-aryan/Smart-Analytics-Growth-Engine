@@ -156,8 +156,8 @@ export default function DashboardPage(): React.ReactElement {
               )}
               {activeTab === 1 && (
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                  {charts.length > 0 ? (
-                    charts.map((chart: ChartSpec) => (
+                  {charts.filter((c: ChartSpec) => !c.is_custom).length > 0 ? (
+                    charts.filter((c: ChartSpec) => !c.is_custom).map((chart: ChartSpec) => (
                       <PlotlyChart key={chart.id} chart={chart} />
                     ))
                   ) : (
@@ -169,7 +169,7 @@ export default function DashboardPage(): React.ReactElement {
                   )}
                 </div>
               )}
-              {activeTab === 2 && <CustomVizPanel sessionId={session.id} />}
+              {activeTab === 2 && <CustomVizPanel sessionId={session.id} savedCharts={charts.filter((c: ChartSpec) => c.is_custom)} />}
               {activeTab === 3 && <ChatPanel sessionId={session.id} />}
               {activeTab === 4 && <FeReportTab feEntries={feEntries} narrative={eda_narrative} />}
               {activeTab === 5 && <AuditLogTab logs={audit_log} />}

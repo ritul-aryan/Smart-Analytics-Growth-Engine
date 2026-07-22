@@ -106,6 +106,8 @@ class ChartOut(BaseModel):
     columns_used: list[str]
     display_order: int
     created_at: str
+    is_custom: bool
+    custom_prompt: str | None
 
 
 class SessionDetailResponse(BaseModel):
@@ -303,4 +305,6 @@ def _chart_out(c: Chart) -> ChartOut:
         columns_used=c.columns_used or [],  # type: ignore[attr-defined]
         display_order=c.display_order or 0,  # type: ignore[attr-defined]
         created_at=c.created_at.isoformat(),  # type: ignore[attr-defined]
+        is_custom=bool(c.is_custom),  # type: ignore[attr-defined]
+        custom_prompt=c.custom_prompt,  # type: ignore[attr-defined]
     )

@@ -35,6 +35,8 @@ export interface ChartSpec {
   columns_used: string[];
   display_order: number;
   created_at: string;
+  is_custom?: boolean;
+  custom_prompt?: string | null;
 }
 
 // ---------------------------------------------------------------------------
