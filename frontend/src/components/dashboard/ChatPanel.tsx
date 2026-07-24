@@ -42,7 +42,7 @@ function MessageBubble({ msg }: { msg: LocalMessage }): React.ReactElement {
       <div className={["max-w-[80%] space-y-2", isUser ? "items-end" : "items-start"].join(" ")}>
         <div
           className={[
-            "rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+            "rounded-2xl px-4 py-3 text-sm leading-relaxed",
             isUser
               ? "rounded-tr-sm bg-[var(--sage-accent)] text-white"
               : "rounded-tl-sm bg-[var(--sage-bg-overlay)] text-[var(--sage-text-primary)]",
@@ -136,7 +136,7 @@ export default function ChatPanel({
   return (
     <div
       className={[
-        "flex flex-col rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)]",
+        "mx-auto w-full max-w-4xl flex flex-col rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)]",
         className,
       ].join(" ")}
     >
@@ -151,15 +151,16 @@ export default function ChatPanel({
           <p className="text-xs text-[var(--sage-text-muted)]">Ask anything about your dataset</p>
         </div>
       </div>
-      <div className="flex-1 min-h-[500px] max-h-[70vh] space-y-3 overflow-y-auto p-5">
+      <div className="flex-1 min-h-[560px] max-h-[70vh] space-y-3 overflow-y-auto p-5">
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-8 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--sage-bg-overlay)]">
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-[var(--sage-bg-overlay)]">
               <svg className="h-6 w-6 text-[var(--sage-text-dim)]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.84 8.84 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
               </svg>
             </div>
-            <p className="text-sm text-[var(--sage-text-dim)]">No messages yet. Ask a question about your data.</p>
+            <p className="text-base font-semibold text-[var(--sage-text-primary)]">Ask anything about your dataset</p>
+            <p className="text-sm text-[var(--sage-text-dim)]">e.g. Which features drive the target? What columns have outliers?</p>
           </div>
         )}
         {messages.map((msg) => (

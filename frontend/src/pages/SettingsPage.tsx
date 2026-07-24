@@ -252,8 +252,8 @@ export default function SettingsPage(): React.ReactElement {
   const resetAnalysisSettings = useUiStore((s) => s.resetAnalysisSettings);
 
   return (
-    <main className="flex flex-1 flex-col overflow-y-auto px-6 py-10">
-      <div className="w-full max-w-xl">
+    <main className="flex flex-1 flex-col overflow-y-auto px-6 py-12">
+      <div className="w-full max-w-3xl">
         {/* Header */}
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--sage-accent-soft)]">
@@ -269,7 +269,7 @@ export default function SettingsPage(): React.ReactElement {
           </div>
         </div>
 
-        <div className="mt-8">
+        <div className="mt-10">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--sage-text-muted)]">
             LLM Provider
           </h2>
@@ -288,7 +288,7 @@ export default function SettingsPage(): React.ReactElement {
           </div>
         </div>
 
-        <div className="mt-8">
+        <div className="mt-10 border-t border-[var(--sage-border)] pt-8">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--sage-text-muted)]">
             Appearance
           </h2>
@@ -301,7 +301,7 @@ export default function SettingsPage(): React.ReactElement {
           </div>
         </div>
 
-        <div className="mt-8">
+        <div className="mt-10 border-t border-[var(--sage-border)] pt-8">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--sage-text-muted)]">
               Analysis defaults

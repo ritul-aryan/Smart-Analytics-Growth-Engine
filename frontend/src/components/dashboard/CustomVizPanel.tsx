@@ -101,8 +101,8 @@ export default function CustomVizPanel({
   const visibleCharts = localCharts.filter((c) => !deletedIds.has(c.id));
 
   return (
-    <div className={["space-y-5", className].join(" ")}>
-      <div className="rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)] p-5">
+    <div className={["mx-auto w-full max-w-5xl space-y-6", className].join(" ")}>
+      <div className="rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)] p-6">
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--sage-accent-soft)]">
             <svg className="h-4 w-4 text-[var(--sage-accent)]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -121,9 +121,9 @@ export default function CustomVizPanel({
               type="button"
               onClick={() => handleExample(ex)}
               className={[
-                "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                "rounded-full border px-3 py-1.5 text-xs transition-colors",
                 "border-[var(--sage-border-strong)] text-[var(--sage-text-muted)]",
-                "hover:border-[var(--sage-accent-border)] hover:text-[var(--sage-accent)]",
+                "hover:border-[var(--sage-accent-border)] hover:bg-[var(--sage-accent-soft)] hover:text-[var(--sage-accent)]",
               ].join(" ")}
             >
               {ex}
@@ -173,7 +173,7 @@ export default function CustomVizPanel({
             Generated charts ({visibleCharts.length})
           </p>
           {visibleCharts.map((chart) => (
-            <div key={chart.id} className="relative">
+            <div key={chart.id} className="relative rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)] p-4">
               <ChartErrorBoundary>
                 <PlotlyChart chart={chart} height={280} />
               </ChartErrorBoundary>
@@ -196,12 +196,15 @@ export default function CustomVizPanel({
         </div>
       )}
       {visibleCharts.length === 0 && !isPending && (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--sage-border-strong)] p-12 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--sage-bg-overlay)]">
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--sage-border-strong)] p-16 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-[var(--sage-bg-overlay)]">
             <svg className="h-6 w-6 text-[var(--sage-text-dim)]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path d="M3 13h8V3H3v10zM13 21h8V11h-8v10zM13 3v6h8V3h-8zM3 21h8v-6H3v6z" />
             </svg>
           </div>
+          <p className="text-base font-semibold text-[var(--sage-text-primary)]">
+            Your custom charts will appear here
+          </p>
           <p className="text-sm text-[var(--sage-text-dim)]">
             No custom charts yet. Type a request above to generate one.
           </p>
