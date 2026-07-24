@@ -32,6 +32,7 @@ import ChatPanel from "../components/dashboard/ChatPanel";
 import FeReportTab from "../components/dashboard/FeReportTab";
 import AuditLogTab from "../components/dashboard/AuditLogTab";
 import DownloadsTab from "../components/dashboard/DownloadsTab";
+import ChartExpandModal from "../components/dashboard/ChartExpandModal";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
 import ErrorBanner from "../components/shared/ErrorBanner";
 import type { ChartSpec } from "../types/chart";
@@ -55,6 +56,7 @@ const PENDING_STATUSES = new Set(["processing", "audit", "upload"]);
 
 export default function DashboardPage(): React.ReactElement {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const [expandedChart, setExpandedChart] = React.useState<ChartSpec | null>(null);
 
   const dashboardTabBySession = useSessionStore((s) => s.dashboardTabBySession);
   const setDashboardTab       = useSessionStore((s) => s.setDashboardTab);
@@ -158,7 +160,19 @@ export default function DashboardPage(): React.ReactElement {
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                   {charts.filter((c: ChartSpec) => !c.is_custom).length > 0 ? (
                     charts.filter((c: ChartSpec) => !c.is_custom).map((chart: ChartSpec) => (
-                      <PlotlyChart key={chart.id} chart={chart} />
+                      <div
+                        key={chart.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setExpandedChart(chart)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedChart(chart); } }}
+                        className="chart-card-glow group cursor-pointer rounded-xl transition-transform hover:-translate-y-0.5"
+                      >
+                        <PlotlyChart chart={chart} insightMode="collapsed" />
+                        <div className="px-4 pb-3 pt-1 text-right">
+                          <span className="text-xs font-medium text-[var(--sage-accent)] group-hover:underline">View details →</span>
+                        </div>
+                      </div>
                     ))
                   ) : (
                     <p className="col-span-2 py-12 text-center text-sm text-[var(--sage-text-muted)]">
@@ -177,6 +191,7 @@ export default function DashboardPage(): React.ReactElement {
             </motion.div>
           </AnimatePresence>
         </main>
+        {expandedChart && <ChartExpandModal chart={expandedChart} onClose={() => setExpandedChart(null)} />}
       </div>
   );
 }

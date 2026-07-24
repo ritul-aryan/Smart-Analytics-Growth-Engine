@@ -8,6 +8,7 @@ import React, { Component, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { sendChatMessage } from "../../api/chat";
 import PlotlyChart from "./PlotlyChart";
+import ChartExpandModal from "./ChartExpandModal";
 import type { ChartSpec } from "../../types/chart";
 
 interface EBState { hasError: boolean }
@@ -63,6 +64,7 @@ export default function CustomVizPanel({
   const [localCharts, setLocalCharts] = useState<ChartSpec[]>(savedCharts);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [lastError, setLastError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<ChartSpec | null>(null);
 
   const { mutate: generate, isPending } = useMutation({
     mutationFn: (message: string) => sendChatMessage(sessionId, message),
@@ -173,13 +175,23 @@ export default function CustomVizPanel({
             Generated charts ({visibleCharts.length})
           </p>
           {visibleCharts.map((chart) => (
-            <div key={chart.id} className="relative rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)] p-4">
+            <div
+              key={chart.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setExpanded(chart)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(chart); } }}
+              className="chart-card-glow relative cursor-pointer rounded-xl border border-[var(--sage-border)] bg-[var(--sage-bg-elevated)] p-4"
+            >
               <ChartErrorBoundary>
-                <PlotlyChart chart={chart} height={280} />
+                <PlotlyChart chart={chart} height={280} insightMode="collapsed" />
               </ChartErrorBoundary>
+              <div className="pb-1 pt-2 text-right">
+                <span className="text-xs font-medium text-[var(--sage-accent)] hover:underline">View details →</span>
+              </div>
               <button
                 type="button"
-                onClick={() => handleDelete(chart.id)}
+                onClick={(e) => { e.stopPropagation(); handleDelete(chart.id); }}
                 aria-label="Remove chart"
                 className={[
                   "absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full",
@@ -210,6 +222,7 @@ export default function CustomVizPanel({
           </p>
         </div>
       )}
+      {expanded && <ChartExpandModal chart={expanded} onClose={() => setExpanded(null)} />}
     </div>
   );
 }

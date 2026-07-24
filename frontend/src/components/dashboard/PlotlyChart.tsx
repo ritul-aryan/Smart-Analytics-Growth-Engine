@@ -93,6 +93,9 @@ interface PlotlyChartProps {
   showExport?: boolean;
   /** Extra Tailwind classes for the outer card. */
   className?: string;
+  /** Insight block detail level: "full" (all sections), "collapsed" (first
+   *  section only), or "none" (hidden entirely). Default: "full". */
+  insightMode?: "full" | "collapsed" | "none";
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +143,7 @@ export default function PlotlyChart({
   height = 300,
   showExport = true,
   className = "",
+  insightMode = "full",
 }: PlotlyChartProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const hasPlot = useRef(false);
@@ -274,14 +278,17 @@ export default function PlotlyChart({
           Falls back gracefully to a single paragraph for legacy single-line
           insights that contain no blank-line separators. Display-only; the rich
           full-page treatment is a redesign item. */}
-      {chart.insight_text && (
+      {chart.insight_text && insightMode !== "none" && (
         <div className="border-t border-[rgba(255,255,255,0.07)] bg-[var(--sage-accent-soft)] px-4 py-3">
           <div className="flex items-start gap-2.5">
             <span className="mt-0.5 shrink-0 rounded bg-[var(--sage-accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--sage-accent)]">
               Insight
             </span>
             <div className="flex min-w-0 flex-col gap-2">
-              {chart.insight_text.split("\n\n").map((section, i) => {
+              {(insightMode === "collapsed"
+                ? chart.insight_text.split("\n\n").slice(0, 1)
+                : chart.insight_text.split("\n\n")
+              ).map((section, i) => {
                 const dashIdx = section.indexOf(" — ");
                 const hasLabel =
                   dashIdx > 0 && section.slice(0, dashIdx) === section.slice(0, dashIdx).toUpperCase();
